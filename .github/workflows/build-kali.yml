@@ -76,14 +76,16 @@ jobs:
             -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy semgrep curl wget git docker.io jq sshpass testssl" \
             -- --artifactdir ../../build/images
           cd ..
+          mkdir -p build/images
+          mv images/*.qcow2 build/images/ 2>/dev/null || true
           ls -la build/images/
 
       - name: Create work image
         run: |
           mkdir -p build
-          BASE=$(ls build/images/*.qcow2 2>/dev/null | head -1)
+          BASE=$(ls build/images/*.qcow2 images/*.qcow2 2>/dev/null | head -1)
           if [ -z "$BASE" ]; then
-            BASE=$(ls build/images/*.raw 2>/dev/null | head -1)
+            BASE=$(ls images/*.raw 2>/dev/null | head -1)
             qemu-img convert -f raw -O qcow2 "$BASE" build/${{ env.OUTPUT_NAME }}-work.qcow2
           else
             cp "$BASE" build/${{ env.OUTPUT_NAME }}-work.qcow2
