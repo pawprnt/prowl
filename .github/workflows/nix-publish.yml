@@ -1,0 +1,22 @@
+name: Publish to Nix Flake Registry
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  nix-publish:
+    uses: pawprnt/.github/.github/workflows/nix-publish.yml@main
+    with:
+      pkgname: prowl
+      nixpkgs-repo: pawprnt/nixpkgs
+      nix-path: nix/default.nix
+      version: ${{ inputs.version || github.ref_name }}
+    secrets:
+      NIX_GITHUB_TOKEN: ${{ secrets.NIX_GITHUB_TOKEN }}

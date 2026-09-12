@@ -1,0 +1,254 @@
+name: Build Prowl Kali Image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      force_full_build:
+        description: 'Force full rebuild (skip incremental)'
+        required: false
+        default: 'false'
+        type: boolean
+      install_tools:
+        description: 'Install Kali tools (slower, larger image)'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  KALI_VERSION: "2026.2"
+  OUTPUT_NAME: "prowl-kali"
+  MAX_PART_SIZE: "1800M"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours max
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qemu-utils \
+            libguestfs-tools \
+            libvirt-daemon-system \
+            libvirt-clients \
+            virtinst \
+            curl \
+            jq \
+            numfmt
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build prowl binary
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -ldflags "-s -w -X main.version=${{ github.ref_name || 'dev' }} -X main.commit=$(git rev-parse --short HEAD) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -tags netgo -installsuffix netgo \
+            -o prowl-linux-amd64 ./cmd/prowl/
+          chmod +x prowl-linux-amd64
+          ./prowl-linux-amd64 --version
+
+      - name: Download previous release (incremental)
+        if: github.event.inputs.force_full_build != 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.OUTPUT_NAME }}-image
+          path: releases/
+
+      - name: Reassemble previous release
+        if: steps.download-prev.outcome == 'success'
+        continue-on-error: true
+        run: |
+          if [ -f "releases/manifest.json" ]; then
+            echo "Reassembling previous release..."
+            mkdir -p releases
+            cat releases/${{ env.OUTPUT_NAME }}.part.* > releases/${{ env.OUTPUT_NAME }}.qcow2
+            echo "Previous release reassembled"
+          fi
+
+      - name: Download base Kali image
+        id: download-kali
+        run: |
+          KALI_IMAGE="kali-linux-${{ env.KALI_VERSION }}-qemu-amd64.qcow2"
+          echo "KALI_IMAGE=$KALI_IMAGE" >> $GITHUB_ENV
+
+          if [ -f "releases/${{ env.OUTPUT_NAME }}.qcow2" ]; then
+            echo "Using previous release as base (incremental build)"
+            echo "BASE_IMAGE=releases/${{ env.OUTPUT_NAME }}.qcow2" >> $GITHUB_ENV
+          elif [ -f "$KALI_IMAGE" ]; then
+            echo "Base image already exists"
+            echo "BASE_IMAGE=$KALI_IMAGE" >> $GITHUB_ENV
+          else
+            echo "Downloading base Kali image..."
+            curl -L --progress-bar -o "$KALI_IMAGE" \
+              "https://cdimage.kali.org/kali-${{ env.KALI_VERSION }}/${KALI_IMAGE}"
+            echo "BASE_IMAGE=$KALI_IMAGE" >> $GITHUB_ENV
+          fi
+
+      - name: Create work image
+        run: |
+          mkdir -p build
+          qemu-img create -f qcow2 -b "$BASE_IMAGE" -F qcow2 \
+            "build/${{ env.OUTPUT_NAME }}-work.qcow2"
+          qemu-img resize "build/${{ env.OUTPUT_NAME }}-work.qcow2" 40G
+
+      - name: Clean caches
+        run: |
+          virt-customize -a "build/${{ env.OUTPUT_NAME }}-work.qcow2" \
+            --run-command "apt-get clean" \
+            --run-command "apt-get autoremove -y" \
+            --run-command "rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*" \
+            --run-command "rm -rf /tmp/* /var/tmp/*" \
+            --run-command "rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/*" \
+            --run-command "rm -rf /usr/share/locale/* /usr/share/i18n/*" \
+            --run-command "rm -rf /var/cache/pip/* /root/.cache/*" \
+            --run-command "rm -rf /var/log/*.log /var/log/**/*.log" \
+            --run-command "find / -name '*.pyc' -delete 2>/dev/null || true" \
+            --run-command "find / -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true"
+
+      - name: Install prowl
+        run: |
+          virt-customize -a "build/${{ env.OUTPUT_NAME }}-work.qcow2" \
+            --upload "prowl-linux-amd64:/usr/local/bin/prowl" \
+            --run-command "chmod +x /usr/local/bin/prowl"
+
+      - name: Bundle bounty-data
+        run: |
+          virt-customize -a "build/${{ env.OUTPUT_NAME }}-work.qcow2" \
+            --run-command "mkdir -p /home/kali/.prowl" \
+            --upload "bounty-data:/home/kali/.prowl/bounty-data" \
+            --run-command "chown -R kali:kali /home/kali/.prowl"
+
+      - name: Install Kali tools
+        if: github.event.inputs.install_tools != 'false'
+        run: |
+          virt-customize -a "build/${{ env.OUTPUT_NAME }}-work.qcow2" \
+            --run-command "DEBIAN_FRONTEND=noninteractive apt-get update" \
+            --run-command "DEBIAN_FRONTEND=noninteractive apt-get install -y \
+              kali-tools-web \
+              kali-tools-passwords \
+              kali-tools-exploitation \
+              kali-tools-post-exploitation \
+              kali-tools-forensics \
+              kali-tools-sniffing-spoofing \
+              kali-tools-information-gathering \
+              kali-tools-vulnerability \
+              kali-tools-social-engineering \
+              kali-tools-reverse-engineering \
+              kali-tools-wireless \
+              kali-tools-fuzzing" \
+            --run-command "apt-get clean"
+
+      - name: Compress image
+        run: |
+          echo "Sparsifying..."
+          virt-sparsify --compress \
+            "build/${{ env.OUTPUT_NAME }}-work.qcow2" \
+            "build/${{ env.OUTPUT_NAME }}-sparse.qcow2"
+
+          echo "Converting to final QCOW2..."
+          qemu-img convert -f qcow2 -O qcow2 -c \
+            -o compression_type=zlib,cluster_size=65536 \
+            "build/${{ env.OUTPUT_NAME }}-sparse.qcow2" \
+            "${{ env.OUTPUT_NAME }}.qcow2"
+
+          echo "Final size: $(du -h ${{ env.OUTPUT_NAME }}.qcow2 | cut -f1)"
+
+      - name: Split for GitHub release
+        run: |
+          mkdir -p splits
+          rm -f splits/*
+          split -b ${{ env.MAX_PART_SIZE }} -d -a 3 \
+            "${{ env.OUTPUT_NAME }}.qcow2" \
+            "splits/${{ env.OUTPUT_NAME }}.part."
+
+          PARTS=$(ls splits/*.part.* | wc -l)
+          SIZE=$(du -sh splits | cut -f1)
+          echo "Split into $PARTS parts, total: $SIZE"
+
+      - name: Generate manifest
+        run: |
+          PARTS=$(ls splits/*.part.* | wc -l)
+          SIZE=$(du -sh splits | cut -f1)
+          cat > splits/manifest.json << EOF
+          {
+            "name": "${{ env.OUTPUT_NAME }}",
+            "version": "${{ github.ref_name || 'dev' }}",
+            "commit": "$(git rev-parse --short HEAD)",
+            "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "parts": $PARTS,
+            "max_part_size": "${{ env.MAX_PART_SIZE }}",
+            "total_size": "$SIZE",
+            "base_kali": "${{ env.KALI_VERSION }}",
+            "features": [
+              "prowl", "nmap", "nuclei", "httpx", "subfinder", "ffuf",
+              "gobuster", "sqlmap", "nikto", "whatweb", "wpscan",
+              "hydra", "john", "hashcat", "metasploit", "burpsuite",
+              "responder", "bloodhound", "binwalk", "radare2",
+              "bettercap", "mitmproxy", "semgrep", "dalfox", "katana", "gau"
+            ]
+          }
+          EOF
+
+      - name: Upload parts as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.OUTPUT_NAME }}-image
+          path: splits/
+          retention-days: 5
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            splits/${{ env.OUTPUT_NAME }}.part.*
+            splits/manifest.json
+          body: |
+            ## Prowl Kali Image ${{ github.ref_name }}
+
+            Pre-built Kali Linux QEMU image with **prowl** and security tools pre-installed.
+
+            ### Quick Start
+            ```bash
+            # Reassemble
+            cat ${{ env.OUTPUT_NAME }}.part.* > ${{ env.OUTPUT_NAME }}.qcow2
+
+            # Run
+            qemu-system-x86_64 -m 4G -smp 2 -enable-kvm \
+              -drive file=${{ env.OUTPUT_NAME }}.qcow2,format=qcow2 \
+              -net user,hostfwd=tcp::2222-:22 -net nic
+
+            # SSH
+            ssh kali@localhost -p 2222
+            # Password: kali
+            ```
+
+            ### Included Tools
+            prowl, nmap, nuclei, httpx, subfinder, ffuf, gobuster, sqlmap,
+            nikto, whatweb, wpscan, hydra, john, hashcat, metasploit,
+            burpsuite, responder, bloodhound, binwalk, radare2,
+            bettercap, mitmproxy, semgrep, dalfox, katana, gau
+
+            ### Base
+            Kali Linux ${{ env.KALI_VERSION }}
+          draft: false
+          prerelease: false
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf build/ splits/ *.qcow2
