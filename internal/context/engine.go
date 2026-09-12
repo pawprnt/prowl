@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/foxinwinter/prowl/internal/session"
+	"github.com/pawprnt/prowl/internal/session"
 )
 
 type Service struct {

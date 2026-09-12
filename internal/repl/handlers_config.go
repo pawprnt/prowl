@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/foxinwinter/prowl/internal/config"
-	"github.com/foxinwinter/prowl/internal/scanner"
+	"github.com/pawprnt/prowl/internal/config"
+	"github.com/pawprnt/prowl/internal/scanner"
 )
 
 func (r *REPL) showTools() error {

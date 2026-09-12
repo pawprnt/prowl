@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/foxinwinter/prowl/internal/scanner"
+	"github.com/pawprnt/prowl/internal/scanner"
 )
 
 type ExportFinding struct {

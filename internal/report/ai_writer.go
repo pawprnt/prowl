@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/foxinwinter/prowl/internal/config"
+	"github.com/pawprnt/prowl/internal/config"
 )
 
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)

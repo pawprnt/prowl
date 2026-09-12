@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/foxinwinter/prowl/internal/report"
+	"github.com/pawprnt/prowl/internal/report"
 )
 
 func (r *REPL) reportCreate(args []string) error {

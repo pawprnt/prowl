@@ -71,7 +71,7 @@
     },
     {
       "name": "prowl",
-      "import_path": "github.com/foxinwinter/prowl/cmd/prowl@latest",
+      "import_path": "github.com/pawprnt/prowl/cmd/prowl@latest",
       "category": "core",
       "description": "This tool"
     }

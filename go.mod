@@ -1,4 +1,4 @@
-module github.com/foxinwinter/prowl
+module github.com/pawprnt/prowl
 
 go 1.26.7
 

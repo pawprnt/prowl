@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/foxinwinter/prowl/internal/scanner"
+	"github.com/pawprnt/prowl/internal/scanner"
 )
 
 func (r *REPL) reconQuick(args []string) error {

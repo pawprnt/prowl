@@ -12,8 +12,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/foxinwinter/prowl/internal/config"
-	"github.com/foxinwinter/prowl/internal/scanner"
+	"github.com/pawprnt/prowl/internal/config"
+	"github.com/pawprnt/prowl/internal/scanner"
 	"golang.org/x/term"
 )
 

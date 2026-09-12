@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/foxinwinter/prowl/internal/scanner"
+	"github.com/pawprnt/prowl/internal/scanner"
 )
 
 func (r *REPL) cmdGobuster(args []string) error {

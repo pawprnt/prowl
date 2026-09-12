@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/foxinwinter/prowl/internal/report"
+	"github.com/pawprnt/prowl/internal/report"
 )
 
 type CommandHistory struct {

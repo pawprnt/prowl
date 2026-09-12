@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/foxinwinter/prowl/data"
-	"github.com/foxinwinter/prowl/internal/bounty"
+	"github.com/pawprnt/prowl/data"
+	"github.com/pawprnt/prowl/internal/bounty"
 )
 
 var bountyManager = bounty.NewManager()

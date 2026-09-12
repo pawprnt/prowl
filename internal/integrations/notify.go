@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/foxinwinter/prowl/internal/report"
+	"github.com/pawprnt/prowl/internal/report"
 )
 
 type NotificationChannel interface {

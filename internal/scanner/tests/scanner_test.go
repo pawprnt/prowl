@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/foxinwinter/prowl/internal/profiles"
-	"github.com/foxinwinter/prowl/internal/report"
-	"github.com/foxinwinter/prowl/internal/scanner"
-	"github.com/foxinwinter/prowl/internal/session"
-	"github.com/foxinwinter/prowl/internal/tools"
+	"github.com/pawprnt/prowl/internal/profiles"
+	"github.com/pawprnt/prowl/internal/report"
+	"github.com/pawprnt/prowl/internal/scanner"
+	"github.com/pawprnt/prowl/internal/session"
+	"github.com/pawprnt/prowl/internal/tools"
 )
 
 func TestRunnerRunCommand(t *testing.T) {

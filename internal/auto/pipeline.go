@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/foxinwinter/prowl/internal/profiles"
-	rpt "github.com/foxinwinter/prowl/internal/report"
+	"github.com/pawprnt/prowl/internal/profiles"
+	rpt "github.com/pawprnt/prowl/internal/report"
 )
 
 type Pipeline struct {

@@ -26,12 +26,12 @@ func MainBanner() {
 		fmt.Println(colorize(colorBold+colorMagenta, banner))
 		fmt.Println(colorize(colorDim, fox))
 		fmt.Println(colorize(colorDim, "  security research toolkit"))
-		fmt.Println(colorize(colorDim, "  github.com/foxinwinter/prowl"))
+		fmt.Println(colorize(colorDim, "  github.com/pawprnt/prowl"))
 	} else {
 		fmt.Println(banner)
 		fmt.Println(fox)
 		fmt.Println("  security research toolkit")
-		fmt.Println("  github.com/foxinwinter/prowl")
+		fmt.Println("  github.com/pawprnt/prowl")
 	}
 	fmt.Println()
 }

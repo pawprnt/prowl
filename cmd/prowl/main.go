@@ -15,12 +15,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/foxinwinter/prowl/internal/auto"
-	"github.com/foxinwinter/prowl/internal/config"
-	"github.com/foxinwinter/prowl/internal/export"
-	"github.com/foxinwinter/prowl/internal/repl"
-	"github.com/foxinwinter/prowl/internal/tools"
-	"github.com/foxinwinter/prowl/internal/wordlist"
+	"github.com/pawprnt/prowl/internal/auto"
+	"github.com/pawprnt/prowl/internal/config"
+	"github.com/pawprnt/prowl/internal/export"
+	"github.com/pawprnt/prowl/internal/repl"
+	"github.com/pawprnt/prowl/internal/tools"
+	"github.com/pawprnt/prowl/internal/wordlist"
 )
 
 var (
@@ -982,7 +982,7 @@ func handleCheckUpdates() {
 
 	fmt.Fprintln(os.Stderr, "\033[90mchecking GitHub releases...\033[0m")
 
-	cmd := exec.Command("curl", "-sS", "https://api.github.com/repos/foxinwinter/prowl/releases/latest")
+	cmd := exec.Command("curl", "-sS", "https://api.github.com/repos/pawprnt/prowl/releases/latest")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\033[31mfailed to check updates: %v\033[0m\n", err)
@@ -1015,7 +1015,7 @@ func handleCheckUpdates() {
 func handleSelfUpdate() {
 	fmt.Fprintf(os.Stderr, "\033[36mself-updating prowl...\033[0m\n")
 
-	cmd := exec.Command("curl", "-sS", "https://api.github.com/repos/foxinwinter/prowl/releases/latest")
+	cmd := exec.Command("curl", "-sS", "https://api.github.com/repos/pawprnt/prowl/releases/latest")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\033[31mfailed to check for updates: %v\033[0m\n", err)
@@ -1049,8 +1049,8 @@ func handleSelfUpdate() {
 
 	// For now, just tell the user to update manually since we don't know the platform
 	fmt.Fprintln(os.Stderr, "\033[90mmanual update instructions:\033[0m")
-	fmt.Fprintf(os.Stderr, "  go install github.com/foxinwinter/prowl/cmd/prowl@%s\n", release.TagName)
-	fmt.Fprintf(os.Stderr, "  or download from: https://github.com/foxinwinter/prowl/releases\n")
+	fmt.Fprintf(os.Stderr, "  go install https://github.com/pawprnt/prowl/cmd/prowl@%s\n", release.TagName)
+	fmt.Fprintf(os.Stderr, "  or download from: https://github.com/pawprnt/prowl/releases\n")
 
 	_ = exe
 }

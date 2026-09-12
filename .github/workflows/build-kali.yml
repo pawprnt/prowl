@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+  schedule:
+    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       install_tools:
@@ -72,57 +74,91 @@ jobs:
 
       - name: Prepare image and inject prowl
         run: |
+          set -x
+
+          echo "=== Preparing work image ==="
           mkdir -p build
           BASE=$(ls build/images/*.qcow2 2>/dev/null | head -1)
           if [ -z "$BASE" ]; then
-            echo "No qcow2 image found"
+            echo "ERROR: No qcow2 image found in build/images/"
+            ls -la build/images/ 2>/dev/null || echo "build/images/ does not exist"
             exit 1
           fi
+          echo "Base image: $BASE ($(du -h "$BASE" | cut -f1))"
           cp "$BASE" build/${{ env.OUTPUT_NAME }}-work.qcow2
+          echo "Resizing to 40G..."
           qemu-img resize build/${{ env.OUTPUT_NAME }}-work.qcow2 40G
 
-          echo "Connecting image via nbd..."
+          echo "=== Connecting image via nbd ==="
           sudo modprobe nbd max_part=8
           sudo qemu-nbd --connect=/dev/nbd0 build/${{ env.OUTPUT_NAME }}-work.qcow2
           sleep 3
-          ls /dev/nbd0*
+          echo "NBD devices:"
+          ls -la /dev/nbd0*
 
-          echo "Mounting root partition..."
-          sudo mkdir -p /mnt/image
-          # Find the root partition (largest ext4)
-          PART=$(lsblk -nrpo NAME,TYPE,FSTYPE /dev/nbd0 2>/dev/null | grep ext4 | head -1 | awk '{print $1}')
+          echo "=== Partition layout ==="
+          lsblk -f /dev/nbd0 || true
+          sudo fdisk -l /dev/nbd0 || true
+
+          echo "=== Finding root partition ==="
+          # List all partitions and their filesystems
+          for p in /dev/nbd0p*; do
+            FSTYPE=$(blkid -s TYPE -o value "$p" 2>/dev/null || echo "unknown")
+            echo "  $p -> $FSTYPE"
+          done
+
+          # Find the root partition (ext4, or first partition)
+          PART=$(lsblk -nrpo NAME,FSTYPE /dev/nbd0 2>/dev/null | grep ext4 | head -1 | awk '{print $1}')
           if [ -z "$PART" ]; then
-            PART="/dev/nbd0p2"
+            PART="/dev/nbd0p1"
           fi
-          echo "Using partition: $PART"
-          sudo mount "$PART" /mnt/image
+          echo "Using root partition: $PART"
 
-          echo "Installing prowl binary..."
+          echo "=== Mounting root partition ==="
+          sudo mkdir -p /mnt/image
+          sudo mount "$PART" /mnt/image
+          echo "Mounted. Contents:"
+          sudo ls -la /mnt/image/
+
+          echo "=== Installing prowl binary ==="
           sudo cp prowl-linux-amd64 /mnt/image/usr/local/bin/prowl
           sudo chmod +x /mnt/image/usr/local/bin/prowl
+          echo "Installed. File info:"
+          sudo ls -la /mnt/image/usr/local/bin/prowl
 
-          echo "Enabling SSH..."
-          sudo chroot /mnt/image systemctl enable ssh
+          echo "=== Enabling SSH ==="
+          sudo chroot /mnt/image systemctl enable ssh || echo "SSH enable failed (may not be installed)"
 
-          echo "Bundling bounty-data..."
+          echo "=== Bundling bounty-data ==="
           sudo mkdir -p /mnt/image/home/kali/.prowl/bounty-data
           sudo cp -r data/bounty-data/* /mnt/image/home/kali/.prowl/bounty-data/
           sudo chown -R 1000:1000 /mnt/image/home/kali/.prowl
+          echo "Bounty data files:"
+          sudo ls -la /mnt/image/home/kali/.prowl/bounty-data/
 
-          echo "Unmounting..."
+          echo "=== Unmounting and disconnecting ==="
           sudo umount /mnt/image
           sudo qemu-nbd --disconnect /dev/nbd0
           sleep 2
 
-          echo "Verifying prowl in image..."
-          sudo modprobe nbd max_part=8
+          echo "=== Verifying prowl in image ==="
           sudo qemu-nbd --connect=/dev/nbd0 build/${{ env.OUTPUT_NAME }}-work.qcow2
           sleep 3
           sudo mkdir -p /mnt/image
-          sudo mount /dev/nbd0p2 /mnt/image
-          sudo /mnt/image/usr/local/bin/prowl --version || echo "prowl binary exists but can't run here (expected)"
+          # Use the same partition detection
+          PART=$(lsblk -nrpo NAME,FSTYPE /dev/nbd0 2>/dev/null | grep ext4 | head -1 | awk '{print $1}')
+          if [ -z "$PART" ]; then
+            PART="/dev/nbd0p1"
+          fi
+          echo "Verifying on partition: $PART"
+          sudo mount "$PART" /mnt/image
+          echo "prowl in image:"
+          sudo ls -la /mnt/image/usr/local/bin/prowl
+          echo "bounty-data in image:"
+          sudo ls /mnt/image/home/kali/.prowl/bounty-data/ | head -5
           sudo umount /mnt/image
           sudo qemu-nbd --disconnect /dev/nbd0
+          echo "=== Done ==="
 
       - name: Compress image
         run: |

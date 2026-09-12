@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/foxinwinter/prowl/internal/tools"
+	"github.com/pawprnt/prowl/internal/tools"
 )
 
 type DepAuditResult struct {

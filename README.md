@@ -99,7 +99,7 @@ nix run github:pawprnt/nixpkgs#prowl
 
 ### releases (recommended)
 
-download the latest binary for your platform from the [releases page](https://github.com/foxinwinter/prowl/releases):
+download the latest binary for your platform from the [releases page](https://github.com/pawprnt/prowl/releases):
 
 | platform | architecture | file |
 |----------|-------------|------|
@@ -111,14 +111,14 @@ download the latest binary for your platform from the [releases page](https://gi
 
 ```bash
 # linux example
-curl -LO https://github.com/foxinwinter/prowl/releases/latest/download/prowl-linux-amd64
+curl -LO https://github.com/pawprnt/prowl/releases/latest/download/prowl-linux-amd64
 chmod +x prowl-linux-amd64
 sudo mv prowl-linux-amd64 /usr/local/bin/prowl
 ```
 
 ### kali linux image
 
-a pre-configured Kali Linux QEMU image with prowl and all supported tools pre-installed is available from [releases](https://github.com/foxinwinter/prowl/releases).
+a pre-configured Kali Linux QEMU image with prowl and all supported tools pre-installed is available from [releases](https://github.com/pawprnt/prowl/releases).
 
 **note:** the image is x86_64 only. it requires KVM support (`/dev/kvm`) and will not work on ARM/Apple Silicon without emulation.
 
@@ -126,8 +126,8 @@ the image is split into parts (<2GB each) due to GitHub's file size limit. downl
 
 ```bash
 # download all parts
-curl -LO https://github.com/foxinwinter/prowl/releases/latest/download/prowl-kali.part.00
-curl -LO https://github.com/foxinwinter/prowl/releases/latest/download/prowl-kali.part.01
+curl -LO https://github.com/pawprnt/prowl/releases/latest/download/prowl-kali.part.00
+curl -LO https://github.com/pawprnt/prowl/releases/latest/download/prowl-kali.part.01
 # ... download all parts listed in the release
 
 # reassemble
@@ -154,13 +154,13 @@ the image includes: nmap, nuclei, httpx, subfinder, ffuf, gobuster, sqlmap, nikt
 ### go install
 
 ```bash
-go install github.com/foxinwinter/prowl/cmd/prowl@latest
+go install github.com/pawprnt/prowl/cmd/prowl@latest
 ```
 
 ### from source
 
 ```bash
-git clone https://github.com/foxinwinter/prowl.git
+git clone https://github.com/pawprnt/prowl.git
 cd prowl
 just build
 sudo cp build/prowl /usr/local/bin/prowl
