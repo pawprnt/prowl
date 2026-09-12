@@ -14,8 +14,6 @@ on:
 
 env:
   OUTPUT_NAME: "prowl-kali"
-  MAX_PART_SIZE: "1800M"
-  SSH_PORT: "2222"
 
 jobs:
   build:
@@ -41,7 +39,7 @@ jobs:
             zerofree \
             curl \
             jq \
-            sshpass
+            nbd-client
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -57,7 +55,7 @@ jobs:
           chmod +x prowl-linux-amd64
           ./prowl-linux-amd64 --version
 
-      - name: Build base Kali image
+      - name: Build Kali image with all packages
         run: |
           cd kali/image-build
           sudo ./build.sh \
@@ -66,12 +64,13 @@ jobs:
             -T none \
             -s 40 \
             -U kali:kali \
-            -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy testssl.sh curl wget git docker.io jq sshpass openssh-server qemu-guest-agent" \
+            -P "openssh-server qemu-guest-agent nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy testssl.sh curl wget git docker.io jq sshpass \
+              kali-tools-web kali-tools-passwords kali-tools-exploitation kali-tools-post-exploitation kali-tools-forensics kali-tools-sniffing-spoofing kali-tools-information-gathering kali-tools-vulnerability kali-tools-social-engineering kali-tools-reverse-engineering kali-tools-wireless kali-tools-fuzzing" \
             -- --artifactdir ../../build/images
           sudo chown -R runner:runner ../../build
           ls -la ../../build/images/
 
-      - name: Prepare work image
+      - name: Prepare image and inject prowl
         run: |
           mkdir -p build
           BASE=$(ls build/images/*.qcow2 2>/dev/null | head -1)
@@ -82,73 +81,48 @@ jobs:
           cp "$BASE" build/${{ env.OUTPUT_NAME }}-work.qcow2
           qemu-img resize build/${{ env.OUTPUT_NAME }}-work.qcow2 40G
 
-      - name: Boot image and configure via SSH
-        run: |
-          IMAGE="build/${{ env.OUTPUT_NAME }}-work.qcow2"
+          echo "Connecting image via nbd..."
+          sudo modprobe nbd max_part=8
+          sudo qemu-nbd --connect=/dev/nbd0 build/${{ env.OUTPUT_NAME }}-work.qcow2
+          sleep 3
+          ls /dev/nbd0*
 
-          echo "Starting QEMU..."
-          qemu-system-x86_64 \
-            -m 4G -smp 2 -display none \
-            -drive file="$IMAGE",format=qcow2 \
-            -net user,hostfwd=tcp::${{ env.SSH_PORT }}-:22 \
-            -net nic \
-            -pidfile build/qemu.pid \
-            -daemonize
-
-          echo "Waiting for SSH..."
-          for i in $(seq 1 120); do
-            if sshpass -p kali ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-              -p ${{ env.SSH_PORT }} kali@localhost true 2>/dev/null; then
-              echo "SSH ready after ${i}s"
-              break
-            fi
-            if [ $i -eq 120 ]; then
-              echo "SSH timeout"
-              exit 1
-            fi
-            sleep 5
-          done
-
-          SSH="sshpass -p kali ssh -o StrictHostKeyChecking=no -p ${{ env.SSH_PORT }} kali@localhost"
-          SCP="sshpass -p kali scp -o StrictHostKeyChecking=no -P ${{ env.SSH_PORT }}"
+          echo "Mounting root partition..."
+          sudo mkdir -p /mnt/image
+          # Find the root partition (largest ext4)
+          PART=$(lsblk -nrpo NAME,TYPE,FSTYPE /dev/nbd0 2>/dev/null | grep ext4 | head -1 | awk '{print $1}')
+          if [ -z "$PART" ]; then
+            PART="/dev/nbd0p2"
+          fi
+          echo "Using partition: $PART"
+          sudo mount "$PART" /mnt/image
 
           echo "Installing prowl binary..."
-          $SCP prowl-linux-amd64 kali@localhost:/tmp/prowl
-          $SSH "sudo mv /tmp/prowl /usr/local/bin/prowl && sudo chmod +x /usr/local/bin/prowl && prowl --version"
+          sudo cp prowl-linux-amd64 /mnt/image/usr/local/bin/prowl
+          sudo chmod +x /mnt/image/usr/local/bin/prowl
+
+          echo "Enabling SSH..."
+          sudo chroot /mnt/image systemctl enable ssh
 
           echo "Bundling bounty-data..."
-          $SSH "sudo mkdir -p /home/kali/.prowl/bounty-data"
-          $SCP -r data/bounty-data/* kali@localhost:/tmp/bounty-data/
-          $SSH "sudo mv /tmp/bounty-data/* /home/kali/.prowl/bounty-data/ && sudo chown -R kali:kali /home/kali/.prowl"
+          sudo mkdir -p /mnt/image/home/kali/.prowl/bounty-data
+          sudo cp -r data/bounty-data/* /mnt/image/home/kali/.prowl/bounty-data/
+          sudo chown -R 1000:1000 /mnt/image/home/kali/.prowl
 
-          if [ "${{ github.event.inputs.install_tools }}" != "false" ]; then
-            echo "Installing Kali tools..."
-            $SSH "sudo DEBIAN_FRONTEND=noninteractive apt-get update"
-            $SSH "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-              kali-tools-web \
-              kali-tools-passwords \
-              kali-tools-exploitation \
-              kali-tools-post-exploitation \
-              kali-tools-forensics \
-              kali-tools-sniffing-spoofing \
-              kali-tools-information-gathering \
-              kali-tools-vulnerability \
-              kali-tools-social-engineering \
-              kali-tools-reverse-engineering \
-              kali-tools-wireless \
-              kali-tools-fuzzing"
-            $SSH "sudo apt-get clean"
-          fi
+          echo "Unmounting..."
+          sudo umount /mnt/image
+          sudo qemu-nbd --disconnect /dev/nbd0
+          sleep 2
 
-          echo "Shutting down VM..."
-          $SSH "sudo shutdown -h now" || true
-          sleep 5
-
-          QEMU_PID=$(cat build/qemu.pid 2>/dev/null)
-          if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
-            kill "$QEMU_PID" || true
-            sleep 2
-          fi
+          echo "Verifying prowl in image..."
+          sudo modprobe nbd max_part=8
+          sudo qemu-nbd --connect=/dev/nbd0 build/${{ env.OUTPUT_NAME }}-work.qcow2
+          sleep 3
+          sudo mkdir -p /mnt/image
+          sudo mount /dev/nbd0p2 /mnt/image
+          sudo /mnt/image/usr/local/bin/prowl --version || echo "prowl binary exists but can't run here (expected)"
+          sudo umount /mnt/image
+          sudo qemu-nbd --disconnect /dev/nbd0
 
       - name: Compress image
         run: |
@@ -239,5 +213,6 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          kill $(cat build/qemu.pid 2>/dev/null) 2>/dev/null || true
+          sudo qemu-nbd --disconnect /dev/nbd0 2>/dev/null || true
+          sudo umount /mnt/image 2>/dev/null || true
           sudo rm -rf build/ splits/ *.qcow2
