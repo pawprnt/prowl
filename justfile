@@ -154,12 +154,9 @@ build-for-image:
 # Build base Kali image from scratch using kali-vm
 download-kali:
     @echo "Building base Kali image using kali-vm..."
-    @if [ ! -d "kali-vm" ]; then \
-        git clone --depth 1 https://gitlab.com/kalilinux/build-scripts/kali-vm.git; \
-    fi
-    @cd kali-vm && sudo ./build.sh \
+    @cd kali/image-build && sudo ./build.sh \
         -v qemu -f qemu -D none -T default -s 40 -U kali:kali \
-        -- --artifactdir ../images
+        -- --artifactdir ../../images
     @mv images/*.qcow2 {{kali_image}} 2>/dev/null || \
         (mv images/*.raw images/base-kali.raw && \
          qemu-img convert -f raw -O qcow2 images/base-kali.raw {{kali_image}})

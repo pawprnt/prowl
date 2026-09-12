@@ -65,13 +65,9 @@ jobs:
           chmod +x prowl-linux-amd64
           ./prowl-linux-amd64 --version
 
-      - name: Clone kali-vm build scripts
-        run: |
-          git clone --depth 1 https://gitlab.com/kalilinux/build-scripts/kali-vm.git
-
       - name: Build base Kali image
         run: |
-          cd kali-vm
+          cd kali/image-build
           sudo ./build.sh \
             -v qemu \
             -f qemu \
@@ -79,7 +75,7 @@ jobs:
             -T default \
             -s 40 \
             -U kali:kali \
-            -- --artifactdir ../images
+            -- --artifactdir ../../images
           cd ..
           mv images/*.qcow2 base-kali.qcow2 2>/dev/null || \
           mv images/*.raw base-kali.raw 2>/dev/null || \
