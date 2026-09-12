@@ -82,11 +82,12 @@ jobs:
 
       - name: Create work image
         run: |
+          sudo chown -R runner:runner build/ images/ 2>/dev/null || true
           mkdir -p build
           BASE=$(ls build/images/*.qcow2 images/*.qcow2 2>/dev/null | head -1)
           if [ -z "$BASE" ]; then
             BASE=$(ls images/*.raw 2>/dev/null | head -1)
-            qemu-img convert -f raw -O qcow2 "$BASE" build/${{ env.OUTPUT_NAME }}-work.qcow2
+            sudo qemu-img convert -f raw -O qcow2 "$BASE" build/${{ env.OUTPUT_NAME }}-work.qcow2
           else
             cp "$BASE" build/${{ env.OUTPUT_NAME }}-work.qcow2
           fi
