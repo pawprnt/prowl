@@ -26,6 +26,32 @@ a lightweight security research CLI tool. combines recon, vulnerability scanning
 - **175+ REPL commands** organized by category
 - **42+ scanner modules** covering web, network, mobile, hardware, compliance, and more
 
+## contents
+
+- [installation](#installation)
+  - [nixos](#nixos)
+  - [releases](#releases-recommended)
+  - [kali linux image](#kali-linux-image)
+  - [go install](#go-install)
+  - [from source](#from-source)
+- [quick start](#quick-start)
+- [command reference](#command-reference)
+  - [CLI flags](#cli-flags)
+  - [REPL commands](#repl-commands)
+  - [keyboard shortcuts](#keyboard-shortcuts)
+  - [recon subcommands](#recon-subcommands)
+  - [scan subcommands](#scan-subcommands)
+  - [report subcommands](#report-subcommands)
+- [configuration](#configuration)
+- [examples](#examples)
+- [supported tools](#supported-tools)
+- [scan profiles](#scan-profiles)
+- [risk scoring](#risk-scoring)
+- [building](#building)
+  - [kali image](#kali-image)
+- [contributing](#contributing)
+- [license](#license)
+
 ## installation
 
 ### nixos
