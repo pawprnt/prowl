@@ -4,11 +4,9 @@ binary_name := "build/prowl"
 version := `git describe --tags --always 2>/dev/null || echo "dev"`
 commit := `git rev-parse --short HEAD 2>/dev/null || echo "none"`
 date := `date -u +%Y-%m-%dT%H:%M:%SZ`
-kali_version := "2026.2"
-kali_mirror := "https://cdimage.kali.org/kali-" + kali_version + "/kali-linux-" + kali_version + "-qemu-amd64.qcow2"
-kali_image := "kali-linux-" + kali_version + "-qemu-amd64.qcow2"
 output_name := "prowl-kali"
 max_part_size := "1800M"
+image_type := env_var_or_default("IMAGE_TYPE", "qemu")
 
 # ─── Build ──────────────────────────────────────────────────
 
@@ -152,10 +150,12 @@ build-for-image:
     @echo "Built {{binary_name}}-linux-amd64"
 
 # Build base Kali image from scratch using kali-vm
+# Usage: just download-kali
+#        IMAGE_TYPE=virtualbox just download-kali
 download-kali:
-    @echo "Building base Kali image using kali-vm..."
+    @echo "Building base Kali image (type: {{image_type}})..."
     @cd kali/image-build && sudo ./build.sh \
-        -v qemu -f qemu -T none -s 40 -U kali:kali \
+        -v {{image_type}} -f {{image_type}} -T none -s 40 -U kali:kali \
         -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy semgrep curl wget git docker.io jq sshpass testssl" \
         -- --artifactdir ../../build/images
     @echo "Ready: build/images/"
@@ -269,13 +269,15 @@ manifest:
     @echo "Manifest written to splits/manifest.json"
 
 # Full Kali image build (all steps)
+# Usage: just kali-image
+#        IMAGE_TYPE=virtualbox just kali-image
 kali-image: download-kali build-for-image create-work-image clean-image-caches install-prowl-image bundle-bounty-data install-tools-image compress-image split-image manifest
     @echo ""
     @echo "╔══════════════════════════════════════════════╗"
     @echo "║  Kali Image Build Complete!                  ║"
     @echo "╚══════════════════════════════════════════════╝"
     @echo ""
-    @echo "Output:"
+    @echo "  Type:    {{image_type}}"
     @echo "  QCOW2:   {{output_name}}.qcow2"
     @echo "  Splits:  splits/{{output_name}}.part.*"
     @echo "  Manifest: splits/manifest.json"
@@ -290,7 +292,7 @@ kali-image: download-kali build-for-image create-work-image clean-image-caches i
 
 # Quick build (skip tools, just prowl + clean)
 kali-quick: download-kali build-for-image create-work-image clean-image-caches install-prowl-image compress-image split-image manifest
-    @echo "Quick image built (no tool install)"
+    @echo "Quick image built ({{image_type}}, no tool install)"
 
 # Cleanup build artifacts
 clean-image:

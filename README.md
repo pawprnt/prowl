@@ -432,6 +432,23 @@ just clean
 
 binaries are output to `build/`.
 
+### kali image
+
+```bash
+# build qemu image (default)
+just kali-image
+
+# build for a different platform
+IMAGE_TYPE=virtualbox just kali-image
+IMAGE_TYPE=vmware just kali-image
+IMAGE_TYPE=generic just kali-image
+
+# quick build (no tools)
+just kali-quick
+```
+
+supported image types: `qemu`, `virtualbox`, `vmware`, `hyperv`, `generic`
+
 ## contributing
 
 1. fork it
