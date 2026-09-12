@@ -1,4 +1,4 @@
-# prowl
+<div align="center">
 
 ```
 ▀▀▀▀█▄▀▀▀▀█▄ ▄█▀█▄ █▄   ▄█ ██
@@ -8,23 +8,34 @@
                    security research cli
 ```
 
-a lightweight security research CLI tool. combines recon, vulnerability scanning, secret detection, and report generation into a single interactive shell or automated pipeline.
+**a lightweight security research CLI tool.**
+
+combines recon, vulnerability scanning, secret detection, and report generation into a single interactive shell or automated pipeline.
+
+[![license](https://img.shields.io/github/license/pawprnt/prowl?style=flat-square)](LICENSE)
+[![go version](https://img.shields.io/badge/go-1.22+-00ADD8?style=flat-square&logo=go)](https://go.dev)
+[![release](https://img.shields.io/github/v/release/pawprnt/prowl?style=flat-square)](https://github.com/pawprnt/prowl/releases)
+[![build](https://img.shields.io/github/actions/workflow/status/pawprnt/prowl/build-kali.yml?style=flat-square&label=build)](https://github.com/pawprnt/prowl/actions)
+[![platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-333?style=flat-square)](#installation)
+
+</div>
+
+---
 
 ## features
 
-- **interactive REPL** with tab completion, history, and session persistence
-- **automated pipeline** - run full scans without manual interaction
-- **recon** - subdomain enumeration, port scanning, tech fingerprinting, directory brute-force, JS crawling, URL harvesting
-- **vulnerability scanning** - security headers, CORS, SSL/TLS, SQLi, XSS, SSRF, IDOR, open redirect
-- **secret detection** - AWS keys, GitHub tokens, API keys, private keys, hardcoded passwords
-- **bounty integration** - search and manage bug bounty programs
-- **report generation** - markdown, HTML, JSON, SARIF, Burp, Nessus output with risk scoring and CVSS calculation
-- **AI-powered reports** - executive summaries and platform-specific reports via opencode
-- **scan profiles** - passive, quick, normal, thorough, paranoid
-- **resumable scans** - state is saved and can be resumed after interruption
-- **CWE database** - built-in CWE references with remediation guidance
-- **175+ REPL commands** organized by category
-- **42+ scanner modules** covering web, network, mobile, hardware, compliance, and more
+- **interactive REPL** — tab completion, history, session persistence
+- **automated pipeline** — full scans without manual interaction
+- **recon** — subdomains, ports, tech fingerprinting, directory brute-force, JS crawling, URL harvesting
+- **vulnerability scanning** — security headers, CORS, SSL/TLS, SQLi, XSS, SSRF, IDOR, open redirect
+- **secret detection** — AWS keys, GitHub tokens, API keys, private keys, hardcoded passwords
+- **bounty integration** — search and manage bug bounty programs (hackerone, bugcrowd, intigriti, yeswehack)
+- **report generation** — markdown, HTML, JSON, SARIF, Burp, Nessus with risk scoring and CVSS
+- **AI-powered reports** — executive summaries and platform-specific reports via opencode
+- **scan profiles** — passive, quick, normal, thorough, paranoid
+- **resumable scans** — state saved and resumable after interruption
+- **CWE database** — built-in references with remediation guidance
+- **175+ REPL commands** | **42+ scanner modules** | **26+ supported tools**
 
 ## contents
 
@@ -173,7 +184,8 @@ prowl --target example.com --auto
 
 ## command reference
 
-### CLI flags
+<details>
+<summary><b>CLI flags</b></summary>
 
 | flag | description |
 |------|-------------|
@@ -191,7 +203,10 @@ prowl --target example.com --auto
 | `--config` | path to config file |
 | `--version` | show version |
 
-### REPL commands
+</details>
+
+<details>
+<summary><b>REPL commands</b></summary>
 
 commands are organized by category. type `help` to see all commands, or `help <command>` for detailed info.
 
@@ -214,7 +229,10 @@ commands are organized by category. type `help` to see all commands, or `help <c
 | `examples` | `ex` | show usage examples |
 | `exit` | `q` | quit |
 
-### keyboard shortcuts
+</details>
+
+<details>
+<summary><b>keyboard shortcuts</b></summary>
 
 | shortcut | action |
 |----------|--------|
@@ -228,7 +246,10 @@ commands are organized by category. type `help` to see all commands, or `help <c
 | `!!` | repeat last command |
 | `!n` | repeat command n from history |
 
-### recon subcommands
+</details>
+
+<details>
+<summary><b>recon subcommands</b></summary>
 
 | subcommand | description |
 |------------|-------------|
@@ -243,7 +264,10 @@ commands are organized by category. type `help` to see all commands, or `help <c
 | `recon urls` | historical URLs |
 | `recon full` | full recon pipeline |
 
-### scan subcommands
+</details>
+
+<details>
+<summary><b>scan subcommands</b></summary>
 
 | subcommand | description |
 |------------|-------------|
@@ -264,7 +288,10 @@ commands are organized by category. type `help` to see all commands, or `help <c
 | `scan creds` | credential testing |
 | `scan all` | run all scans |
 
-### report subcommands
+</details>
+
+<details>
+<summary><b>report subcommands</b></summary>
 
 | subcommand | description |
 |------------|-------------|
@@ -275,6 +302,8 @@ commands are organized by category. type `help` to see all commands, or `help <c
 | `report list` | list all reports |
 | `report ai [platform]` | AI-enhanced report (executive/full/hackerone/bugcrowd) |
 | `report enhance <idx>` | AI-enhance a finding description |
+
+</details>
 
 ## configuration
 
