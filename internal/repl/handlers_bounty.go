@@ -6,12 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/foxinwinter/prowl/data"
 	"github.com/foxinwinter/prowl/internal/bounty"
 )
 
 var bountyManager = bounty.NewManager()
 
 func init() {
+	if err := bountyManager.LoadEmbedded(data.BountyFS); err == nil {
+		return
+	}
 	paths := []string{}
 	if exe, err := os.Executable(); err == nil {
 		paths = append(paths, filepath.Dir(exe))

