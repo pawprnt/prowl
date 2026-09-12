@@ -222,4 +222,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          rm -rf build/ splits/ *.qcow2 *.raw images/ kali-vm/
+          sudo rm -rf build/ splits/ *.qcow2 *.raw images/
