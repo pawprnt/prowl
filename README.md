@@ -83,6 +83,8 @@ sudo mv prowl-linux-amd64 /usr/local/bin/prowl
 
 a pre-configured Kali Linux QEMU image with prowl and all supported tools pre-installed is available from [releases](https://github.com/foxinwinter/prowl/releases).
 
+**note:** the image is x86_64 only. it requires KVM support (`/dev/kvm`) and will not work on ARM/Apple Silicon without emulation.
+
 the image is split into parts (<2GB each) due to GitHub's file size limit. download all parts and reassemble:
 
 ```bash

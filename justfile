@@ -151,25 +151,18 @@ build-for-image:
         -o {{binary_name}}-linux-amd64 ./cmd/prowl/
     @echo "Built {{binary_name}}-linux-amd64"
 
-# Download base Kali QEMU image
+# Build base Kali image from scratch using kali-vm
 download-kali:
-    @echo "Checking for base Kali image..."
-    @if [ -f "{{kali_image}}" ]; then \
-        echo "Base image already exists: {{kali_image}}"; \
-    elif [ -f "../{{kali_image}}" ]; then \
-        echo "Found image in parent dir"; \
-        cp "../{{kali_image}}" .; \
-    elif [ -f "$HOME/Downloads/kali-qemu/{{kali_image}}" ]; then \
-        echo "Found image in Downloads"; \
-        cp "$HOME/Downloads/kali-qemu/{{kali_image}}" .; \
-    elif [ -f "/home/fox/Downloads/kali-qemu/{{kali_image}}" ]; then \
-        echo "Found image in fox Downloads"; \
-        cp "/home/fox/Downloads/kali-qemu/{{kali_image}}" .; \
-    else \
-        echo "Downloading base Kali image from {{kali_mirror}}..."; \
-        echo "This may take a while (2-3GB download)..."; \
-        curl -L --progress-bar -o "{{kali_image}}" "{{kali_mirror}}"; \
+    @echo "Building base Kali image using kali-vm..."
+    @if [ ! -d "kali-vm" ]; then \
+        git clone --depth 1 https://gitlab.com/kalilinux/build-scripts/kali-vm.git; \
     fi
+    @cd kali-vm && sudo ./build.sh \
+        -v qemu -f qemu -D none -T default -s 40 -U kali:kali \
+        -- --artifactdir ../images
+    @mv images/*.qcow2 {{kali_image}} 2>/dev/null || \
+        (mv images/*.raw images/base-kali.raw && \
+         qemu-img convert -f raw -O qcow2 images/base-kali.raw {{kali_image}})
     @echo "Ready: {{kali_image}}"
 
 # Download previous release (for incremental builds)
