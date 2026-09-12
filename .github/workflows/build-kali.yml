@@ -66,7 +66,7 @@ jobs:
             -T none \
             -s 40 \
             -U kali:kali \
-            -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy testssl.sh curl wget git docker.io jq sshpass" \
+            -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy testssl.sh curl wget git docker.io jq sshpass openssh-server qemu-guest-agent" \
             -- --artifactdir ../../build/images
           sudo chown -R runner:runner ../../build
           ls -la ../../build/images/
@@ -88,7 +88,7 @@ jobs:
 
           echo "Starting QEMU..."
           qemu-system-x86_64 \
-            -m 4G -smp 2 -nographic \
+            -m 4G -smp 2 -display none \
             -drive file="$IMAGE",format=qcow2 \
             -net user,hostfwd=tcp::${{ env.SSH_PORT }}-:22 \
             -net nic \
