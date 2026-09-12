@@ -1,51 +1,44 @@
-# contributing
+# Contributing
 
-thanks for wanting to help out. here's how to get started.
+Thank you for your interest in contributing to Prowl.
 
-## getting started
+## Getting Started
 
-1. fork the repo
-2. clone your fork
-3. create a branch (`git checkout -b feat/my-feature`)
-4. make your changes
-5. commit and push
-6. open a pull request
+1. Fork the repository
+2. Clone your fork
+3. Create a branch (`git checkout -b feat/my-feature`)
+4. Make your changes
+5. Commit and push
+6. Open a pull request
 
-## development
+## Development
 
-requires [just](https://github.com/casey/just) and go 1.22+.
+Requires [just](https://github.com/casey/just) and Go 1.26+.
 
 ```bash
-# build for current platform
+# Build for current platform
 just build
 
-# run
+# Run
 just run
 
-# clean
+# Clean
 just clean
 ```
 
-## code style
+## Pull Requests
 
-- keep it chill
-- lowercase commit messages, no periods, short descriptions
-- follow existing patterns in the codebase
-- no comments unless they're genuinely necessary
+- Keep PRs focused on a single change
+- Describe what changed and why
+- Ensure the project builds (`just build`)
+- Add tests when adding new functionality
 
-## pull requests
+## Issues
 
-- keep PRs focused on one thing
-- describe what changed and why
-- make sure it builds (`just build`)
-- add tests if you're adding functionality
+- Check existing issues before creating a new one
+- Include steps to reproduce
+- Include your OS, Go version, and Prowl version
 
-## issues
+## License
 
-- check existing issues first
-- include steps to reproduce
-- include your os, go version, and prowl version
-
-## license
-
-by contributing, you agree your code is licensed under MIT.
+By contributing, you agree that your code is licensed under MIT.

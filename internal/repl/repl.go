@@ -91,6 +91,7 @@ func New() *REPL {
 	bmPath := filepath.Join(home, bookmarksFile)
 
 	cfg, _ := config.Load()
+	scanner.SetConfig(cfg)
 
 	r := &REPL{
 		historyPath:   histPath,
@@ -851,6 +852,20 @@ func (r *REPL) registerCommands() {
 		Help: "show command history",
 		Handler: func(args []string) error {
 			return r.showHistory()
+		},
+	}
+
+	r.commands["headers"] = &Command{
+		Name:    "headers",
+		Aliases: []string{"hdr"},
+		Help:    "manage custom request headers",
+		Handler: func(args []string) error {
+			return r.handleHeaders(args)
+		},
+		Subcommands: map[string]*Command{
+			"list":   {Name: "list", Help: "list all custom headers", Handler: r.handleHeaders},
+			"set":    {Name: "set", Help: "set a custom header (headers set <name> <value>)", Handler: r.handleHeaders},
+			"unset":  {Name: "unset", Help: "remove a custom header (headers unset <name>)", Handler: r.handleHeaders},
 		},
 	}
 

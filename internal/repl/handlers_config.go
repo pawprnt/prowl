@@ -70,6 +70,12 @@ func (r *REPL) configShow(args []string) error {
 		fmt.Fprintf(os.Stdout, "  max_findings:     %d\n", r.config.MaxFindings)
 		fmt.Fprintf(os.Stdout, "  verbose_output:   %t\n", r.config.VerboseOutput)
 		fmt.Fprintf(os.Stdout, "  confirm_actions:  %t\n", r.config.ConfirmActions)
+		if len(r.config.CustomHeaders) > 0 {
+			fmt.Fprintf(os.Stdout, "\n  custom_headers:\n")
+			for k, v := range r.config.CustomHeaders {
+				fmt.Fprintf(os.Stdout, "    %s: %s\n", k, v)
+			}
+		}
 	}
 
 	if r.target != "" {
@@ -151,6 +157,59 @@ func (r *REPL) configInit(args []string) error {
 func (r *REPL) showHistory() error {
 	for i, cmd := range r.history {
 		fmt.Fprintf(os.Stdout, "%4d  %s\n", i+1, cmd)
+	}
+	return nil
+}
+
+func (r *REPL) handleHeaders(args []string) error {
+	if len(args) == 0 {
+		return r.showHelp([]string{"headers"})
+	}
+
+	if r.config == nil {
+		r.config, _ = config.Load()
+	}
+	if r.config == nil {
+		return fmt.Errorf("no config loaded")
+	}
+	if r.config.CustomHeaders == nil {
+		r.config.CustomHeaders = make(map[string]string)
+	}
+
+	switch args[0] {
+	case "list":
+		if len(r.config.CustomHeaders) == 0 {
+			fmt.Fprintln(os.Stdout, "no custom headers configured")
+			return nil
+		}
+		fmt.Fprintln(os.Stdout, "\n\033[1;37mcustom headers:\033[0m")
+		for k, v := range r.config.CustomHeaders {
+			fmt.Fprintf(os.Stdout, "  %s: %s\n", k, v)
+		}
+	case "set":
+		if len(args) < 3 {
+			return fmt.Errorf("usage: headers set <name> <value>")
+		}
+		name := args[1]
+		value := strings.Join(args[2:], " ")
+		r.config.CustomHeaders[name] = value
+		scanner.SetConfig(r.config)
+		if err := config.Save(r.config); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+		fmt.Fprintf(os.Stdout, "\033[32mheader set: %s: %s\033[0m\n", name, value)
+	case "unset":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: headers unset <name>")
+		}
+		delete(r.config.CustomHeaders, args[1])
+		scanner.SetConfig(r.config)
+		if err := config.Save(r.config); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+		fmt.Fprintf(os.Stdout, "\033[32mheader removed: %s\033[0m\n", args[1])
+	default:
+		return r.showHelp([]string{"headers"})
 	}
 	return nil
 }
