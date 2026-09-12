@@ -156,7 +156,7 @@ download-kali:
     @echo "Building base Kali image (type: {{image_type}})..."
     @cd kali/image-build && sudo ./build.sh \
         -v {{image_type}} -f {{image_type}} -T none -s 40 -U kali:kali \
-        -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy semgrep curl wget git docker.io jq sshpass testssl" \
+        -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy testssl.sh curl wget git docker.io jq sshpass" \
         -- --artifactdir ../../build/images
     @echo "Ready: build/images/"
 
