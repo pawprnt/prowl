@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -51,7 +51,7 @@ jobs:
             jq
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.22'
 
@@ -70,23 +70,23 @@ jobs:
           sudo ./build.sh \
             -v qemu \
             -f qemu \
-            -D none \
-            -T default \
+            -T none \
             -s 40 \
             -U kali:kali \
-            -- --artifactdir ../../images
+            -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy semgrep curl wget git docker.io jq sshpass testssl" \
+            -- --artifactdir ../../build/images
           cd ..
-          mv images/*.qcow2 base-kali.qcow2 2>/dev/null || \
-          mv images/*.raw base-kali.raw 2>/dev/null || \
-          echo "Checking images directory..." && ls -la images/
+          ls -la build/images/
 
       - name: Create work image
         run: |
           mkdir -p build
-          if [ -f base-kali.qcow2 ]; then
-            cp base-kali.qcow2 build/${{ env.OUTPUT_NAME }}-work.qcow2
-          elif [ -f base-kali.raw ]; then
-            qemu-img convert -f raw -O qcow2 base-kali.raw build/${{ env.OUTPUT_NAME }}-work.qcow2
+          BASE=$(ls build/images/*.qcow2 2>/dev/null | head -1)
+          if [ -z "$BASE" ]; then
+            BASE=$(ls build/images/*.raw 2>/dev/null | head -1)
+            qemu-img convert -f raw -O qcow2 "$BASE" build/${{ env.OUTPUT_NAME }}-work.qcow2
+          else
+            cp "$BASE" build/${{ env.OUTPUT_NAME }}-work.qcow2
           fi
           qemu-img resize build/${{ env.OUTPUT_NAME }}-work.qcow2 40G
 

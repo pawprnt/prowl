@@ -155,12 +155,10 @@ build-for-image:
 download-kali:
     @echo "Building base Kali image using kali-vm..."
     @cd kali/image-build && sudo ./build.sh \
-        -v qemu -f qemu -D none -T default -s 40 -U kali:kali \
-        -- --artifactdir ../../images
-    @mv images/*.qcow2 {{kali_image}} 2>/dev/null || \
-        (mv images/*.raw images/base-kali.raw && \
-         qemu-img convert -f raw -O qcow2 images/base-kali.raw {{kali_image}})
-    @echo "Ready: {{kali_image}}"
+        -v qemu -f qemu -T none -s 40 -U kali:kali \
+        -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy semgrep curl wget git docker.io jq sshpass testssl" \
+        -- --artifactdir ../../build/images
+    @echo "Ready: build/images/"
 
 # Download previous release (for incremental builds)
 download-prev-release:
@@ -188,7 +186,8 @@ create-work-image:
         qemu-img create -f qcow2 -b "releases/{{output_name}}.qcow2" -F qcow2 "build/{{output_name}}-work.qcow2"; \
     else \
         echo "Using base Kali image (full build)..."; \
-        qemu-img create -f qcow2 -b "{{kali_image}}" -F qcow2 "build/{{output_name}}-work.qcow2"; \
+        BASE=$$(ls build/images/*.qcow2 2>/dev/null | head -1); \
+        qemu-img create -f qcow2 -b "$$BASE" -F qcow2 "build/{{output_name}}-work.qcow2"; \
     fi
     @qemu-img resize "build/{{output_name}}-work.qcow2" 40G
     @echo "Work image ready"
@@ -295,7 +294,7 @@ kali-quick: download-kali build-for-image create-work-image clean-image-caches i
 
 # Cleanup build artifacts
 clean-image:
-    rm -rf build/ splits/ {{output_name}}.qcow2 {{output_name}}-linux-amd64
+    rm -rf build/ splits/ {{output_name}}.qcow2
     @echo "Cleaned image build artifacts"
 
 # Show image info
