@@ -75,7 +75,7 @@ jobs:
             -U kali:kali \
             -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy testssl.sh curl wget git docker.io jq sshpass" \
             -- --artifactdir ../../build/images
-          sudo chown -R runner:runner ../../build/images
+          sudo chown -R runner:runner ../../build
           ls -la ../../build/images/
 
       - name: Create work image
