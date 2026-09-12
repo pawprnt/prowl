@@ -67,7 +67,7 @@ jobs:
       - name: Build base Kali image
         run: |
           cd kali/image-build
-          ./build.sh \
+          sudo ./build.sh \
             -v qemu \
             -f qemu \
             -T none \
@@ -75,15 +75,13 @@ jobs:
             -U kali:kali \
             -P "nmap masscan nikto whatweb sqlmap hydra john hashcat metasploit-framework burpsuite responder bloodhound binwalk radare2 bettercap mitmproxy testssl.sh curl wget git docker.io jq sshpass" \
             -- --artifactdir ../../build/images
+          sudo chown -R runner:runner ../../build/images
           ls -la ../../build/images/
 
       - name: Create work image
         run: |
           mkdir -p build
           BASE=$(ls build/images/*.qcow2 2>/dev/null | head -1)
-          if [ -z "$BASE" ]; then
-            BASE=$(ls images/*.qcow2 2>/dev/null | head -1)
-          fi
           if [ -z "$BASE" ]; then
             echo "No qcow2 image found"
             exit 1
