@@ -1,0 +1,81 @@
+{
+  "description": "System tweaks, configs, and post-install commands for the Kali image",
+  "shell": "bash",
+  "sections": {
+    "user_setup": {
+      "description": "User account and SSH configuration",
+      "commands": [
+        "echo 'kali:kali' | chpasswd",
+        "sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+        "sed -i 's/PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+        "systemctl enable ssh"
+      ]
+    },
+    "system_tweaks": {
+      "description": "Performance and usability tweaks",
+      "commands": [
+        "timedatectl set-timezone UTC",
+        "locale-gen en_US.UTF-8",
+        "update-locale LANG=en_US.UTF-8",
+        "echo 'defaults write com.apple.ScreencastsLocation -string ~/Desktop' > /dev/null || true"
+      ]
+    },
+    "shell_config": {
+      "description": "Shell configuration for prowl user",
+      "files": {
+        "/home/kali/.bashrc": {
+          "append": [
+            "# Prowl aliases",
+            "alias p='prowl'",
+            "alias pr='prowl --auto'",
+            "export PATH=$HOME/go/bin:$PATH",
+            "",
+            "# Tool shortcuts",
+            "alias nse='nmap --script'",
+            "alias ff='ffuf -u'",
+            "alias nu='nuclei -u'",
+            "alias hx='httpx -u'"
+          ]
+        },
+        "/home/kali/.zshrc": {
+          "append": [
+            "# Prowl aliases",
+            "alias p='prowl'",
+            "alias pr='prowl --auto'",
+            "export PATH=$HOME/go/bin:$PATH"
+          ]
+        }
+      }
+    },
+    "wordlists": {
+      "description": "Symlink wordlists to standard paths",
+      "commands": [
+        "ln -sf /usr/share/seclists /home/kali/seclists",
+        "ln -sf /usr/share/wordlists /home/kali/wordlists"
+      ]
+    },
+    "prowl_config": {
+      "description": "Default prowl configuration",
+      "files": {
+        "/home/kali/.config/prowl/config.yaml": {
+          "content": "threads: 20\n timeout: 30\n severity: \"critical,high,medium\"\n default_profile: normal\n default_format: md\n max_findings: 1000\n rate_limit: 0\n delay: 0\n follow_redirects: true\n insecure_ssl: false\n auto_mode: false\n stealth_mode: false\n verbose_output: false\n confirm_actions: true\n output_dir: ~/prowl-results\n auto_save: true\n proxy_enabled: false\n proxy_addr: \"\"\n"
+        }
+      }
+    },
+    "cleanup": {
+      "description": "Clean up after installation",
+      "commands": [
+        "apt-get clean",
+        "apt-get autoremove -y",
+        "rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*",
+        "rm -rf /tmp/* /var/tmp/*",
+        "rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/*",
+        "rm -rf /usr/share/locale/* /usr/share/i18n/*",
+        "rm -rf /var/cache/pip/* /root/.cache/*",
+        "rm -rf /var/log/*.log",
+        "find / -name '*.pyc' -delete 2>/dev/null || true",
+        "find / -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true"
+      ]
+    }
+  }
+}
