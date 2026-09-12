@@ -506,11 +506,7 @@ supported image types: `qemu`, `virtualbox`, `vmware`, `hyperv`, `generic`
 
 ## contributing
 
-1. fork it
-2. create your branch (`git checkout -b feat/my-feature`)
-3. commit your changes (`git commit -m 'add my feature'`)
-4. push to the branch (`git push origin feat/my-feature`)
-5. open a pull request
+see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 keep it chill. lowercase commit messages, no periods, short descriptions.
 
