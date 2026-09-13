@@ -151,6 +151,32 @@
     };
   };
 
+  # ── .dotfiles (R/O by default) ───────────────────────
+  systemd.services.mount-dotfiles = {
+    description = "Mount .dotfiles as read-only";
+    after = [ "local-fs.target" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = pkgs.writeScript "mount-dotfiles" ''
+        #!/bin/sh
+        DOTFILES="/home/kali/.dotfiles"
+        if [ -d "$DOTFILES" ]; then
+          mount --bind "$DOTFILES" "$DOTFILES"
+          mount -o remount,bind,ro "$DOTFILES"
+          echo "Mounted .dotfiles as read-only"
+        else
+          echo "No .dotfiles found, skipping"
+        fi
+      '';
+      ExecStop = pkgs.writeScript "unmount-dotfiles" ''
+        #!/bin/sh
+        umount /home/kali/.dotfiles 2>/dev/null || true
+      '';
+    };
+  };
+
   # ── mitmproxy (auto-start, routes all traffic) ───────
   services.mitmproxy = {
     enable = true;
@@ -249,6 +275,16 @@
 
     # Wireless
     aircrack-ng
+
+    # Helper scripts
+    (pkgs.writeShellScriptBin "dotfiles-rw" ''
+      mount -o remount,bind,rw /home/kali/.dotfiles
+      echo ".dotfiles remounted read-write"
+    '')
+    (pkgs.writeShellScriptBin "dotfiles-ro" ''
+      mount -o remount,bind,ro /home/kali/.dotfiles
+      echo ".dotfiles remounted read-only"
+    '')
 
     # Languages
     python3
