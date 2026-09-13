@@ -21,7 +21,7 @@
 
   environment.persistence."/persist/home" = {
     users = {
-      kali = {
+      prowl = {
         directories = [
           ".config/prowl"
           ".ssh"
@@ -96,7 +96,7 @@
   # ── System ────────────────────────────────────────────
   system.stateVersion = "24.11";
 
-  networking.hostName = "prowl-kali";
+  networking.hostName = "prowler";
   networking.useDHCP = true;
   networking.networkmanager.enable = true;
 
@@ -128,14 +128,15 @@
   };
 
   # ── Users ─────────────────────────────────────────────
-  users.users.kali = {
+  users.users.prowl = {
     isNormalUser = true;
     extraGroups = [ "wheel" "networkmanager" "docker" ];
     shell = pkgs.bash;
+    home = "/home/prowl";
   };
 
-  users.mutableUsers = false;
-  users.users.kali.initialPassword = "kali";
+  users.mutableUsers = true;
+  users.users.root.initialPassword = "root";
 
   # ── SSH (hardened) ────────────────────────────────────
   services.openssh = {
@@ -147,7 +148,7 @@
       MaxAuthTries = 3;
       ClientAliveInterval = 300;
       ClientAliveCountMax = 2;
-      AllowUsers = [ "kali" ];
+      AllowUsers = [ "prowl" ];
     };
   };
 
@@ -161,7 +162,7 @@
       RemainAfterExit = true;
       ExecStart = pkgs.writeScript "mount-dotfiles" ''
         #!/bin/sh
-        DOTFILES="/home/kali/.dotfiles"
+        DOTFILES="/home/prowl/.dotfiles"
         if [ -d "$DOTFILES" ]; then
           mount --bind "$DOTFILES" "$DOTFILES"
           mount -o remount,bind,ro "$DOTFILES"
@@ -278,11 +279,11 @@
 
     # Helper scripts
     (pkgs.writeShellScriptBin "dotfiles-rw" ''
-      mount -o remount,bind,rw /home/kali/.dotfiles
+      mount -o remount,bind,rw /home/prowl/.dotfiles
       echo ".dotfiles remounted read-write"
     '')
     (pkgs.writeShellScriptBin "dotfiles-ro" ''
-      mount -o remount,bind,ro /home/kali/.dotfiles
+      mount -o remount,bind,ro /home/prowl/.dotfiles
       echo ".dotfiles remounted read-only"
     '')
 
