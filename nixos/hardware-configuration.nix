@@ -15,8 +15,7 @@
   ];
 
   boot.initrd.kernelModules = [ ];
-
-  boot.kernelModules = [ "kvm-intel" "kvm-amd" ];
+  boot.kernelModules = [ ];
   boot.extraModulePackages = [ ];
 
   fileSystems."/" = {
@@ -25,7 +24,4 @@
   };
 
   swapDevices = [ ];
-
-  hardware.cpu.amd.updateMicrocode = true;
-  hardware.cpu.intel.updateMicrocode = true;
 }

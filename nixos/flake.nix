@@ -20,7 +20,7 @@
       format = "vm";
       modules = [
         impermanence.nixosModules.impermanence
-        ./configuration.nix
+        ./system.nix
         ({ pkgs, ... }: {
           nixpkgs.overlays = [ pawprnt-pkgs.overlays.default ];
         })
