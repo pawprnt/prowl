@@ -47,5 +47,29 @@
     "hfsplus"
     "jffs2"
     "udf"
+    # USB HID (badusb prevention)
+    "usbhid"
+    "usbkbd"
+    "usbmouse"
+    "hid-generic"
+    "hid-apple"
+    "hid-logitech"
+    "hid-microsoft"
+  ];
+
+  # Disable USB storage and HID via udev
+  services.udev.extraRules = ''
+    # Block USB storage devices
+    ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", RUN+="/bin/false"
+    # Block USB HID devices (keyboard/mouse emulators)
+    ACTION=="add", SUBSYSTEM=="usb", ATTR{bDeviceClass}=="03", RUN+="/bin/false"
+    # Block composite devices with HID interfaces
+    ACTION=="add", SUBSYSTEM=="usb", ATTR{bNumInterfaces}=="*", ENV{INTERFACE}=="*/3/*", RUN+="/bin/false"
+  '';
+
+  # Disable core dumps
+  systemd.coredump.enable = false;
+  security.pam.loginLimits = [
+    { domain = "*"; type = "hard"; item = "core"; value = "0"; }
   ];
 }
