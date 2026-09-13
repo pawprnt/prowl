@@ -47,25 +47,73 @@
     "hfsplus"
     "jffs2"
     "udf"
-    # USB HID (badusb prevention)
-    "usbhid"
-    "usbkbd"
-    "usbmouse"
-    "hid-generic"
-    "hid-apple"
-    "hid-logitech"
-    "hid-microsoft"
   ];
 
-  # Disable USB storage and HID via udev
+  # USB approval prompt
   services.udev.extraRules = ''
-    # Block USB storage devices
-    ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", RUN+="/bin/false"
-    # Block USB HID devices (keyboard/mouse emulators)
-    ACTION=="add", SUBSYSTEM=="usb", ATTR{bDeviceClass}=="03", RUN+="/bin/false"
-    # Block composite devices with HID interfaces
-    ACTION=="add", SUBSYSTEM=="usb", ATTR{bNumInterfaces}=="*", ENV{INTERFACE}=="*/3/*", RUN+="/bin/false"
+    # Trigger USB approval dialog on device add
+    ACTION=="add", SUBSYSTEM=="usb", RUN+="${pkgs.bash}/bin/bash -c '${pkgs.coreutils}/bin/echo add $$ > /tmp/usb-event'"
   '';
+
+  systemd.services.usb-approval = {
+    description = "USB device approval prompt";
+    after = [ "multi-user.target" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = pkgs.writeScript "usb-approval-monitor" ''
+        #!/bin/sh
+        FIFO="/tmp/usb-approval"
+        ${pkgs.coreutils}/bin/mkfifo "$FIFO" 2>/dev/null || true
+        
+        while true; do
+          if read -r event < "$FIFO"; then
+            DEVICES=$(${pkgs.util_linux}/bin/lsblk -no NAME,SIZE,MODEL /dev/sd? 2>/dev/null | tail -1)
+            USBDEV=$(${pkgs.gnugrep}/bin/grep -l "ID_BUS=usb" /sys/block/sd*/uevent 2>/dev/null | head -1 | xargs dirname | xargs basename)
+            
+            if [ -n "$USBDEV" ]; then
+              VENDOR=$(${pkgs.coreutils}/bin/cat /sys/block/$USBDEV/device/vendor 2>/dev/null | xargs)
+              MODEL=$(${pkgs.coreutils}/bin/cat /sys/block/$USBDEV/device/model 2>/dev/null | xargs)
+              
+              ${pkgs.bash}/bin/bash -c "
+                if command -v zenity &>/dev/null; then
+                  zenity --question --title=\"USB Device Detected\" \
+                    --text=\"A USB device was connected:\\n\\nDevice: /dev/$USBDEV\\nVendor: $VENDOR\\nModel: $MODEL\\n\\nAllow this device?\" \
+                    --ok-label=\"Allow\" --cancel-label=\"Block\" 2>/dev/null
+                  RESULT=\$?
+                elif command -v yad &>/dev/null; then
+                  yad --question --title=\"USB Device Detected\" \
+                    --text=\"A USB device was connected:\\n\\nDevice: /dev/$USBDEV\\nVendor: $VENDOR\\nModel: $MODEL\\n\\nAllow this device?\" \
+                    --button=\"Allow:0\" --button=\"Block:1\" 2>/dev/null
+                  RESULT=\$?
+                else
+                  echo \"USB device detected: /dev/$USBDEV ($VENDOR $MODEL)\"
+                  echo -n \"Allow? [y/N]: \"
+                  read -r answer
+                  if [ \"\$answer\" = \"y\" ] || [ \"\$answer\" = \"Y\" ]; then
+                    RESULT=0
+                  else
+                    RESULT=1
+                  fi
+                fi
+                
+                if [ \$RESULT -eq 0 ]; then
+                  logger \"USB approval: Allowed /dev/$USBDEV ($VENDOR $MODEL)\"
+                  ${pkgs.util_linux}/bin/mount /dev/$USBDEV /mnt/usb 2>/dev/null || true
+                else
+                  logger \"USB approval: Blocked /dev/$USBDEV ($VENDOR $MODEL)\"
+                  ${pkgs.coreutils}/bin/echo 0 > /sys/block/$USBDEV/device/enable 2>/dev/null || true
+                fi
+              "
+            fi
+          fi
+          sleep 1
+        done
+      '';
+      Restart = "always";
+      RestartSec = 5;
+    };
+  };
 
   # Disable core dumps
   systemd.coredump.enable = false;
