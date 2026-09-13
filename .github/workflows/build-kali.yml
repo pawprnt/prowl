@@ -7,21 +7,6 @@ on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
-    inputs:
-      install_tools:
-        description: 'Install security tools'
-        required: false
-        default: 'true'
-        type: boolean
-      desktop:
-        description: 'Desktop environment'
-        required: false
-        default: 'xfce'
-        type: choice
-        options:
-          - xfce
-          - kde
-          - none
 
 env:
   OUTPUT_NAME: "prowl-kali"
@@ -29,7 +14,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 180
 
     steps:
       - name: Checkout
@@ -37,60 +22,39 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git \
-            debootstrap \
-            qemu-utils \
-            qemu-system-x86 \
-            fdisk \
-            e2fsprogs \
-            rsync \
-            dosfstools \
-            zerofree \
-            nbd-client \
-            curl \
-            jq
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
         with:
-          go-version: '1.26'
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            max-jobs = auto
 
-      - name: Build prowl binary
+      - name: Build image
         run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-            -ldflags "-s -w -X main.version=${{ github.ref_name || 'dev' }} -X main.commit=$(git rev-parse --short HEAD) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            -tags netgo -installsuffix netgo \
-            -o prowl-linux-amd64 ./cmd/prowl/
-          chmod +x prowl-linux-amd64
-          ./prowl-linux-amd64 --version
+          cd nixos
+          nix build .#prowl-kali --option sandbox false --verbose 2>&1 | tail -100
 
-      - name: Build minimal Kali image
+      - name: Find and prepare image
         run: |
-          sudo ./kali/build-minimal.sh \
-            -s 30 \
-            -U kali:kali \
-            -D ${{ github.event.inputs.desktop || 'xfce' }}
+          mkdir -p build/images
+          # nixos-generators outputs to result/
+          cp nixos/result/share/qemu/*.{qcow2,img} build/images/ 2>/dev/null || \
+          cp nixos/result/bin/*.{qcow2,img} build/images/ 2>/dev/null || \
+          find nixos/result -name "*.qcow2" -o -name "*.img" | head -1 | xargs -I{} cp {} build/images/
+          ls -la build/images/
 
       - name: Inject prowl and bounty-data
         run: |
-          IMAGE="build/images/prowl-kali.qcow2"
-          mkdir -p build/images
+          IMAGE=$(find build/images -name "*.qcow2" -o -name "*.img" | head -1)
+          if [ -z "$IMAGE" ]; then
+            echo "No image found"
+            exit 1
+          fi
 
           echo "Connecting image via nbd..."
           sudo modprobe nbd max_part=8
           sudo qemu-nbd --connect=/dev/nbd0 "$IMAGE"
           sleep 3
-
-          echo "Partition layout:"
-          lsblk -f /dev/nbd0 || true
-          for p in /dev/nbd0p*; do
-            FSTYPE=$(blkid -s TYPE -o value "$p" 2>/dev/null || echo "unknown")
-            echo "  $p -> $FSTYPE"
-          done
 
           PART=$(lsblk -nrpo NAME,FSTYPE /dev/nbd0 2>/dev/null | grep ext4 | head -1 | awk '{print $1}')
           if [ -z "$PART" ]; then
@@ -100,11 +64,6 @@ jobs:
 
           sudo mkdir -p /mnt/image
           sudo mount "$PART" /mnt/image
-
-          echo "Installing prowl..."
-          sudo cp prowl-linux-amd64 /mnt/image/usr/local/bin/prowl
-          sudo chmod +x /mnt/image/usr/local/bin/prowl
-          sudo ls -la /mnt/image/usr/local/bin/prowl
 
           echo "Bundling bounty-data..."
           sudo mkdir -p /mnt/image/home/kali/.prowl/bounty-data
@@ -117,10 +76,11 @@ jobs:
 
       - name: Compress image
         run: |
+          IMAGE=$(find build/images -name "*.qcow2" -o -name "*.img" | head -1)
           echo "Converting to final QCOW2..."
           qemu-img convert -f qcow2 -O qcow2 -c \
             -o compression_type=zlib,cluster_size=65536 \
-            "build/images/prowl-kali.qcow2" \
+            "$IMAGE" \
             "${{ env.OUTPUT_NAME }}.qcow2"
 
           echo "Final size: $(du -h ${{ env.OUTPUT_NAME }}.qcow2 | cut -f1)"
@@ -150,7 +110,7 @@ jobs:
             "parts": $PARTS,
             "max_part_size": "1800M",
             "total_size": "$SIZE",
-            "desktop": "${{ github.event.inputs.desktop || 'xfce' }}"
+            "base": "nixos-unstable"
           }
           EOF
 
@@ -171,9 +131,8 @@ jobs:
           body: |
             ## Prowl Kali Image ${{ github.ref_name }}
 
-            Minimal Kali Linux QEMU image built with debootstrap. Only exactly what's needed — no bloat.
-
-            Desktop: ${{ github.event.inputs.desktop || 'xfce' }}
+            NixOS-based security research VM with prowl and tools pre-installed.
+            Reproducible, declarative, minimal.
 
             ### Quick Start
             ```bash
@@ -196,4 +155,4 @@ jobs:
         run: |
           sudo qemu-nbd --disconnect /dev/nbd0 2>/dev/null || true
           sudo umount /mnt/image 2>/dev/null || true
-          sudo rm -rf build/ splits/ *.qcow2
+          sudo rm -rf build/ splits/ *.qcow2 nixos/result
