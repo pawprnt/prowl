@@ -11,13 +11,15 @@
       url = "github:pawprnt/nixpkgs";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    impermanence.url = "github:nix-community/impermanence";
   };
 
-  outputs = { self, nixpkgs, nixos-generators, pawprnt-pkgs, ... }: {
+  outputs = { self, nixpkgs, nixos-generators, pawprnt-pkgs, impermanence, ... }: {
     packages.x86_64-linux.prowl-kali = nixos-generators.nixosGenerate {
       system = "x86_64-linux";
       format = "vm";
       modules = [
+        impermanence.nixosModules.impermanence
         ./configuration.nix
         ({ pkgs, ... }: {
           nixpkgs.overlays = [ pawprnt-pkgs.overlays.default ];
