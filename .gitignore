@@ -4,3 +4,7 @@ build/
 # //-- edtior / file-mgr stuff --\\ #
 .hidden
 *.kate-swp
+
+# build results
+result
+result-*
