@@ -12,7 +12,7 @@ on:
 
 jobs:
   nix-publish:
-    uses: pawprnt/.github/.github/workflows/nix/deploy.yml@main
+    uses: pawprnt/.github/.github/workflows/nix-deploy.yml@main
     with:
       pkgname: prowl
       nixpkgs-repo: pawprnt/nixpkgs
