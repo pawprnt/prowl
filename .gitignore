@@ -8,3 +8,4 @@ build/
 # build results
 result
 result-*
+*.qcow2

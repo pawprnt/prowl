@@ -23,4 +23,6 @@
   };
 
   swapDevices = [ ];
+
+  virtualisation.qemu.enableSharedMemory = true;
 }
