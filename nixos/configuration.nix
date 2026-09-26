@@ -2,20 +2,11 @@
 
 {
   imports = [
-    ./hardware-configuration.nix
-    ./modules/boot.nix
-    ./modules/desktop.nix
-    ./modules/networking.nix
-    ./modules/users.nix
-    ./modules/services.nix
-    ./modules/hardening.nix
-    ./modules/packages.nix
-    ./modules/nix.nix
-    ./modules/persistence.nix
+    ./modules
+    ./profiles/base.nix
   ];
 
   system.stateVersion = "24.11";
-
   time.timeZone = "America/Chicago";
 
   i18n.defaultLocale = "en_US.UTF-8";

@@ -3,20 +3,19 @@
 {
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix")
+    ./vm-hardening.nix
   ];
 
   boot.initrd.availableKernelModules = [
-    "ahci"
-    "xhci_pci"
     "virtio_pci"
     "virtio_scsi"
+    "virtio_blk"
+    "virtio_net"
     "sd_mod"
     "sr_mod"
   ];
 
-  boot.initrd.kernelModules = [ ];
-  boot.kernelModules = [ ];
-  boot.extraModulePackages = [ ];
+  boot.kernelModules = [ "kvm-intel" "kvm-amd" ];
 
   fileSystems."/" = {
     device = "/dev/disk/by-label/nixos";

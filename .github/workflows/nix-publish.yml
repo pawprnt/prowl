@@ -16,6 +16,6 @@ jobs:
     with:
       pkgname: prowl
       nixpkgs-repo: pawprnt/nixpkgs
-      nix-path: nix/default.nix
+      nix-path: pkgs/prowl/default.nix
     secrets:
       NIX_GITHUB_TOKEN: ${{ secrets.NIX_GITHUB_TOKEN }}

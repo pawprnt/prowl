@@ -15,18 +15,33 @@
   };
 
   outputs = { self, nixpkgs, nixos-generators, pawprnt-pkgs, impermanence, ... }: {
-    packages.x86_64-linux.prowl-kali = nixos-generators.nixosGenerate {
-      system = "x86_64-linux";
-      format = "vm";
-      modules = [
-        impermanence.nixosModules.impermanence
-        ./system.nix
-        ({ pkgs, ... }: {
-          nixpkgs.overlays = [ pawprnt-pkgs.overlays.default ];
-        })
-      ];
-    };
+      packages.x86_64-linux.prowl-kali = nixos-generators.nixosGenerate {
+        system = "x86_64-linux";
+        format = "vm";
+        modules = [
+          impermanence.nixosModules.impermanence
+          ./configuration.nix
+          ./hosts/vm
+          ({ pkgs, ... }: {
+            nixpkgs.overlays = [ pawprnt-pkgs.overlays.default ];
+          })
+        ];
+      };
 
-    packages.x86_64-linux.default = self.packages.x86_64-linux.prowl-kali;
+     packages.x86_64-linux.prowl-vm = self.packages.x86_64-linux.prowl-kali;
+
+     packages.x86_64-linux.default = self.packages.x86_64-linux.prowl-vm;
+
+     nixosConfigurations.prowl = nixpkgs.lib.nixosSystem {
+       system = "x86_64-linux";
+       modules = [
+         impermanence.nixosModules.impermanence
+         ./configuration.nix
+         ./hosts/prowl
+         ({ pkgs, ... }: {
+           nixpkgs.overlays = [ pawprnt-pkgs.overlays.default ];
+         })
+       ];
+     };
   };
 }
