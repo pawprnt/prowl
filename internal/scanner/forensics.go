@@ -4,13 +4,20 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
+
+func randHex(n int) string {
+	b := make([]byte, n)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
 
 type ForensicsResult struct {
 	Target    string            `json:"target"`
@@ -129,6 +136,9 @@ func BinwalkScan(ctx context.Context, file string) (*BinwalkResult, error) {
 			result.Entries = append(result.Entries, entry)
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
 
 	result.Count = len(result.Entries)
 	printProgress("Binwalk found %d entries", result.Count)
@@ -164,6 +174,9 @@ func BinwalkExtract(ctx context.Context, file string) (*BinwalkResult, error) {
 			})
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
 
 	result.Count = len(result.Entries)
 	printProgress("Binwalk extracted %d entries", result.Count)
@@ -179,7 +192,7 @@ func ForemostRecover(ctx context.Context, file, outputDir string) (*ForemostResu
 	}
 
 	if outputDir == "" {
-		outputDir = "/tmp/foremost_output"
+		outputDir = filepath.Join(os.TempDir(), "foremost_"+randHex(8))
 	}
 
 	args := []string{"-i", file, "-o", outputDir}
@@ -202,6 +215,9 @@ func ForemostRecover(ctx context.Context, file, outputDir string) (*ForemostResu
 				result.Found = append(result.Found, line)
 			}
 		}
+		if err := scanner.Err(); err != nil {
+			return nil, err
+		}
 	}
 
 	result.Count = len(result.Found)
@@ -210,18 +226,19 @@ func ForemostRecover(ctx context.Context, file, outputDir string) (*ForemostResu
 }
 
 func BulkExtractor(ctx context.Context, file, outputDir string) (*BulkExtResult, error) {
-	printProgress("Running bulk-extractor on %s", file)
-
-	path, ok := findTool("bulk_extractor")
-	if !ok {
-		return nil, fmt.Errorf("bulk-extractor not found")
-	}
+	printProgress("Running extraction on %s", file)
 
 	if outputDir == "" {
-		outputDir = "/tmp/bulk_output"
+		outputDir = filepath.Join(os.TempDir(), "bulk_output_"+randHex(8))
 	}
 
-	args := []string{"-o", outputDir, file}
+	// bulk_extractor not available on NixOS, use binwalk as fallback
+	path, ok := findTool("binwalk")
+	if !ok {
+		return nil, fmt.Errorf("no extraction tool found (binwalk)")
+	}
+
+	args := []string{"-e", "-C", outputDir, file}
 	_, err := runCommand(ctx, path, args...)
 	if err != nil {
 		return nil, err
@@ -242,7 +259,7 @@ func BulkExtractor(ctx context.Context, file, outputDir string) (*BulkExtResult,
 	}
 
 	result.Count = len(result.Features)
-	printProgress("Bulk-extractor found %d features", result.Count)
+	printProgress("Extraction found %d features", result.Count)
 	return result, nil
 }
 
@@ -271,6 +288,9 @@ func StringsExtract(ctx context.Context, file string, minLength int) (*StringsRe
 		if line != "" {
 			result.Strings = append(result.Strings, line)
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
 	}
 
 	result.Count = len(result.Strings)
@@ -451,7 +471,9 @@ func VolatilityProcesses(ctx context.Context, image string) (*VolatilityResult, 
 		parts := strings.Fields(line)
 		if len(parts) >= 4 {
 			proc := VolProcess{}
-			fmt.Sscanf(parts[0], "%d", &proc.PID)
+			if _, err := fmt.Sscanf(parts[0], "%d", &proc.PID); err != nil {
+				continue
+			}
 			proc.Name = parts[1]
 			proc.State = parts[2]
 			if len(parts) > 3 {
@@ -459,6 +481,9 @@ func VolatilityProcesses(ctx context.Context, image string) (*VolatilityResult, 
 			}
 			result.Processes = append(result.Processes, proc)
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
 	}
 
 	printProgress("Found %d processes", len(result.Processes))
@@ -492,7 +517,9 @@ func VolatilityNetwork(ctx context.Context, image string) (*VolatilityResult, er
 		parts := strings.Fields(line)
 		if len(parts) >= 6 {
 			net := VolNetwork{}
-			fmt.Sscanf(parts[0], "%d", &net.PID)
+			if _, err := fmt.Sscanf(parts[0], "%d", &net.PID); err != nil {
+				continue
+			}
 			net.Protocol = parts[1]
 			net.Local = parts[3]
 			net.Remote = parts[4]
@@ -500,23 +527,17 @@ func VolatilityNetwork(ctx context.Context, image string) (*VolatilityResult, er
 			result.Network = append(result.Network, net)
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
 
 	printProgress("Found %d network connections", len(result.Network))
 	return result, nil
 }
 
 func Autopsy(ctx context.Context) error {
-	printProgress("Launching autopsy")
-
-	path, ok := findTool("autopsy")
-	if !ok {
-		return fmt.Errorf("autopsy not found")
-	}
-
-	cmd := exec.CommandContext(ctx, path)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Start()
+	// autopsy not available on NixOS (Java GUI app)
+	return fmt.Errorf("autopsy not available on NixOS - use volatility3 or radare2 for forensics")
 }
 
 func Radare2Analyze(ctx context.Context, file string) (*Radare2Result, error) {
@@ -566,6 +587,9 @@ func Radare2Strings(ctx context.Context, file string) (*Radare2Result, error) {
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
 
 	return result, nil
 }
@@ -583,6 +607,10 @@ func Radare2Disasm(ctx context.Context, file, addr string, length int) (*Radare2
 	}
 	if length <= 0 {
 		length = 100
+	}
+
+	if strings.ContainsAny(addr, "!;|&$`" + "\n") {
+		return nil, fmt.Errorf("invalid address: contains unsafe characters")
 	}
 
 	args := []string{"-q", "-c", fmt.Sprintf("s %s; pd %d", addr, length), file}

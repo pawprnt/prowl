@@ -396,16 +396,24 @@ func (r *REPL) cmdFullPentest(args []string) error {
 	fmt.Fprintf(os.Stdout, "\n\033[1;31m=== FULL PENETRATION TEST ON %s ===\033[0m\n\n", r.target)
 
 	fmt.Fprintln(os.Stdout, "\033[1;33mPhase 1: Reconnaissance\033[0m")
-	r.reconQuick(nil)
+	if err := r.reconQuick(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "recon failed: %v\n", err)
+	}
 
 	fmt.Fprintln(os.Stdout, "\n\033[1;33mPhase 2: Scanning\033[0m")
-	r.scanQuick(nil)
+	if err := r.scanQuick(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "scan failed: %v\n", err)
+	}
 
 	fmt.Fprintln(os.Stdout, "\n\033[1;33mPhase 3: Vulnerability Assessment\033[0m")
-	r.scanAll(nil)
+	if err := r.scanAll(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "vuln assessment failed: %v\n", err)
+	}
 
 	fmt.Fprintln(os.Stdout, "\n\033[1;33mPhase 4: Report Generation\033[0m")
-	r.reportGenerate(nil)
+	if err := r.reportGenerate(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "report generation failed: %v\n", err)
+	}
 
 	fmt.Fprintf(os.Stdout, "\n\033[1;31m=== PENETRATION TEST COMPLETE ===\033[0m\n")
 	return nil
@@ -1257,9 +1265,6 @@ func (r *REPL) cmdSessionReplay(args []string) error {
 }
 
 func (r *REPL) cmdSessionStats(args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: session-stats <file>")
-	}
 	fmt.Fprintf(os.Stdout, "\n\033[1;36msession statistics:\033[0m\n")
 	fmt.Fprintf(os.Stdout, "  total commands:   %d\n", len(r.history))
 	fmt.Fprintf(os.Stdout, "  total findings:   %d\n", len(r.session.Findings))

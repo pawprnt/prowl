@@ -401,7 +401,7 @@ func CalculateCVSSFromVector(vector string) (float64, error) {
 	if metricMap["S"] == "U" {
 		impact = 6.42 * iss
 	} else {
-		impact = 7.52 * (iss - 0.029) - 3.25 * math.Pow(iss-0.02, 15)
+		impact = 7.52 * (iss - 0.029) - 3.25 * math.Pow(iss-0.029, 15)
 	}
 
 	if impact <= 0 {
@@ -501,6 +501,9 @@ func MergeReports(reports ...*Report) *Report {
 
 	allFindings := make([]Finding, 0)
 	for _, r := range reports {
+		if r == nil {
+			continue
+		}
 		allFindings = append(allFindings, r.Findings...)
 		if r.Target != merged.Target {
 			merged.MergedFrom = append(merged.MergedFrom, r.Target)

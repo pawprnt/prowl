@@ -34,41 +34,42 @@ const asciiBanner = `▀▀▀▀█▄▀▀▀▀█▄ ▄█▀█▄ █▄
  ██    ██ ██ ██ ██ ██ █ ██ ██ ▄█
  █▀    █▀ ▀█ ▀█▄█▀ ▀█▄▀▄█▀ ▀█▄██
                                 v%s
- Security Research CLI · Automated Pentesting
+ security research cli — automated pentesting
 `
 
 func main() {
 	configPath := flag.String("config", "", "path to config file")
-	target := flag.String("target", "", "target to scan")
+	target := flag.String("target", "", "target host, IP, or URL")
 	autoMode := flag.Bool("auto", false, "run automated scan without REPL")
 	scanType := flag.String("scan", "all", "scan type: recon, vuln, secrets, webapp, ad, network, all")
 	format := flag.String("format", "md", "output format: md, html, json, csv, sarif, burp, nessus")
-	severity := flag.String("severity", "", "filter findings by severity (critical,high,medium,low,info)")
-	verbose := flag.Bool("verbose", false, "enable verbose output")
-	quiet := flag.Bool("quiet", false, "minimal output")
+	severity := flag.String("severity", "", "filter by severity: critical,high,medium,low,info")
+	verbose := flag.Bool("verbose", false, "verbose output")
+	quiet := flag.Bool("quiet", false, "suppress banner and non-essential output")
 	jsonOutput := flag.Bool("json", false, "output results as JSON")
-	output := flag.String("output", "output", "output directory for reports")
-	proxy := flag.String("proxy", "", "HTTP proxy to use for requests")
-	profile := flag.String("profile", "normal", "scan profile: quick, normal, thorough, paranoid")
+	output := flag.String("output", "output", "directory for reports and findings")
+	proxy := flag.String("proxy", "", "HTTP proxy for requests (host:port)")
+	profile := flag.String("profile", "normal", "scan profile: passive, quick, normal, thorough, paranoid")
 	exploit := flag.Bool("exploit", false, "enable exploitation phase (use with caution)")
-	showVersion := flag.Bool("version", false, "show version info")
-	listTools := flag.Bool("list-tools", false, "list all detected security tools")
-	listCommands := flag.Bool("list-commands", false, "list all REPL commands")
-	listWordlists := flag.Bool("list-wordlists", false, "list all embedded wordlists")
-	listExports := flag.Bool("list-exports", false, "list all export formats")
-	resume := flag.Bool("resume", false, "resume interrupted scan")
-	listProfiles := flag.Bool("list-profiles", false, "list available scan profiles")
-	listBuiltin := flag.Bool("list-auto", false, "list available auto scan modules")
-	autoModule := flag.String("auto-module", "", "specific auto module: recon, webapp, ad, network, full")
-	initConfig := flag.Bool("init-config", false, "create default config file at ~/.config/prowl/config.yaml")
-	updateConfig := flag.Bool("update-config", false, "update existing config file with new defaults")
+	showVersion := flag.Bool("version", false, "print version and exit")
+	listTools := flag.Bool("list-tools", false, "list detected security tools")
+	listCommands := flag.Bool("list-commands", false, "list REPL commands")
+	listWordlists := flag.Bool("list-wordlists", false, "list embedded wordlists")
+	listExports := flag.Bool("list-exports", false, "list export formats")
+	resume := flag.Bool("resume", false, "resume an interrupted scan")
+	listProfiles := flag.Bool("list-profiles", false, "list scan profiles")
+	listBuiltin := flag.Bool("list-auto", false, "list auto scan modules")
+	autoModule := flag.String("auto-module", "", "auto module: recon, webapp, ad, network, full")
+	initConfig := flag.Bool("init-config", false, "create default config at ~/.config/prowl/config.yaml")
+	updateConfig := flag.Bool("update-config", false, "update config file with new defaults")
 	generateReport := flag.String("generate-report", "", "generate report from findings JSON file")
-	validateTarget := flag.Bool("validate-target", false, "check if target is alive")
+	validateTarget := flag.Bool("validate-target", false, "check if target is reachable")
 	installTool := flag.String("install-tool", "", "install a missing security tool")
-	uninstallTool := flag.String("uninstall-tool", "", "uninstall a security tool")
+	uninstallTool := flag.String("uninstall-tool", "", "remove an installed security tool")
 	updateTools := flag.Bool("update-tools", false, "update all installed security tools")
-	checkUpdates := flag.Bool("check-updates", false, "check for prowl updates")
-	selfUpdate := flag.Bool("self-update", false, "update prowl binary to latest version")
+	checkUpdates := flag.Bool("check-updates", false, "check for newer prowl releases")
+	selfUpdate := flag.Bool("self-update", false, "update prowl to latest version")
+	noInstall := flag.Bool("no-install", false, "skip tool installation prompts")
 	flag.Parse()
 
 	args := flag.Args()
@@ -201,7 +202,6 @@ func main() {
 			fmt.Fprintln(os.Stderr, "\ninterrupted, saving state...")
 		}
 		cancel()
-		os.Exit(1)
 	}()
 
 	if *validateTarget && *target != "" {
@@ -210,7 +210,8 @@ func main() {
 	}
 
 	if !*quiet {
-		checkToolsWithVersion()
+		tools.SetSkipInstall(*noInstall)
+		checkToolsWithVersion(*noInstall)
 	}
 
 	scanType = validateScanType(*scanType)
@@ -1135,7 +1136,11 @@ func handleGenerateReport(findingsFile, format string) {
 
 // ===== TOOL CHECKER WITH VERSION =====
 
-func checkToolsWithVersion() {
+func checkToolsWithVersion(noInstall bool) {
+	osInfo := tools.DetectOS()
+	fmt.Fprintf(os.Stderr, "\033[36mOS: %s\033[0m\n", osInfo)
+	fmt.Fprintf(os.Stderr, "\033[90mPackage manager: %s\033[0m\n\n", osInfo.PkgManager)
+
 	fmt.Println("\033[36mchecking available tools...\033[0m")
 
 	results := tools.DetectAll()
@@ -1159,8 +1164,10 @@ func checkToolsWithVersion() {
 		}
 	}
 
-	if missing > 0 {
+	if missing > 0 && !noInstall {
 		fmt.Printf("\n\033[33m%d tools available, %d missing. Install missing tools for full functionality.\033[0m\n\n", available, missing)
+	} else if missing > 0 {
+		fmt.Printf("\n\033[33m%d tools available, %d missing.\033[0m\n\n", available, missing)
 	} else {
 		fmt.Printf("\n\033[32mall %d tools available.\033[0m\n\n", available)
 	}

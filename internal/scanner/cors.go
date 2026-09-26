@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -115,7 +116,7 @@ var corsTestConfigs = []CORSTestConfig{
 	},
 }
 
-func AuditCORS(target string) (CORSAuditResult, error) {
+func AuditCORS(ctx context.Context, target string) (CORSAuditResult, error) {
 	printProgress("Running CORS audit on %s", target)
 	result := CORSAuditResult{
 		Target:    target,
@@ -157,7 +158,7 @@ func AuditCORS(target string) (CORSAuditResult, error) {
 			origin = "http://" + domain
 		}
 
-		req, err := http.NewRequest("OPTIONS", url, nil)
+		req, err := http.NewRequestWithContext(ctx, "OPTIONS", url, nil)
 		if err != nil {
 			test.Passed = true
 			result.Tests = append(result.Tests, test)

@@ -183,6 +183,10 @@ func DNSRecon(ctx context.Context, domain string) (*DNSReconResult, error) {
 
 		for i := 0; i < answerCount && offset < n; i++ {
 			for offset < n && resp[offset] != 0 {
+				if resp[offset]&0xC0 == 0xC0 {
+					offset += 2
+					break
+				}
 				offset += int(resp[offset]) + 1
 			}
 			offset += 5
@@ -246,8 +250,13 @@ func SubdomainBrute(ctx context.Context, domain, wordlist string) (*SubdomainBru
 		default:
 		}
 
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Wait()
+			return result, ctx.Err()
+		}
 		wg.Add(1)
-		sem <- struct{}{}
 		go func(sub string) {
 			defer wg.Done()
 			defer func() { <-sem }()
@@ -397,6 +406,10 @@ func lookupDNSNameservers(domain string) []string {
 
 	for i := 0; i < answerCount && offset < n; i++ {
 		for offset < n && resp[offset] != 0 {
+			if resp[offset]&0xC0 == 0xC0 {
+				offset += 2
+				break
+			}
 			offset += int(resp[offset]) + 1
 		}
 		offset += 5

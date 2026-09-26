@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -149,7 +150,9 @@ func MasscanScan(ctx context.Context, target, ports string, rate int) (*MasscanR
 			continue
 		}
 		var port int
-		fmt.Sscanf(parts[3], "%d", &port)
+		if _, err := fmt.Sscanf(parts[3], "%d", &port); err != nil {
+			continue
+		}
 		result.Ports = append(result.Ports, OpenPort{
 			Port:     port,
 			Protocol: parts[1],
@@ -163,18 +166,22 @@ func MasscanScan(ctx context.Context, target, ports string, rate int) (*MasscanR
 }
 
 func UnicornScan(ctx context.Context, target, ports string, threads int) (*UnicornResult, error) {
-	printProgress("Running unicornscan on %s", target)
-
-	path, ok := findTool("unicornscan")
-	if !ok {
-		return nil, fmt.Errorf("unicornscan not found")
-	}
+	printProgress("Running port scan on %s", target)
 
 	if ports == "" {
 		ports = "1-65535"
 	}
 
-	args := []string{"-m", "T" + fmt.Sprintf("%d", max(1, threads)), target + ":" + ports}
+	// unicornscan not available on NixOS, use masscan as fallback
+	path, ok := findTool("masscan")
+	if !ok {
+		return nil, fmt.Errorf("no async port scanner found (masscan)")
+	}
+
+	args := []string{target, "-p", ports, "--rate", "10000", "--open", "-oL", "/dev/stdout"}
+	if threads > 0 {
+		args = append(args, "--min-parallelism", fmt.Sprintf("%d", threads))
+	}
 
 	output, err := runCommand(ctx, path, args...)
 	if err != nil {
@@ -186,28 +193,25 @@ func UnicornScan(ctx context.Context, target, ports string, threads int) (*Unico
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+		// masscan -oL format: open <proto> <ip> <port>
 		parts := strings.Fields(line)
-		if len(parts) < 1 {
-			continue
-		}
-		var port int
-		for _, p := range parts {
-			n, _ := fmt.Sscanf(p, "%d", &port)
-			if n == 1 && port > 0 && port <= 65535 {
-				result.Ports = append(result.Ports, OpenPort{
-					Port:  port,
-					State: "open",
-				})
-				break
+		if len(parts) >= 4 && parts[0] == "open" {
+			port, _ := strconv.Atoi(parts[3])
+			if port > 0 && port <= 65535 {
+			result.Ports = append(result.Ports, OpenPort{
+				Port:     port,
+				Protocol: parts[1],
+				State:    "open",
+			})
 			}
 		}
 	}
 
 	result.Count = len(result.Ports)
-	printProgress("Unicornscan found %d open ports", result.Count)
+	printProgress("Found %d open ports", result.Count)
 	return result, nil
 }
 
@@ -216,7 +220,10 @@ func Hping3Scan(ctx context.Context, target, ports string) ([]OpenPort, error) {
 
 	path, ok := findTool("hping3")
 	if !ok {
-		return nil, fmt.Errorf("hping3 not found")
+		path, ok = findTool("hping")
+	}
+	if !ok {
+		return nil, fmt.Errorf("no hping found (hping3/hping)")
 	}
 
 	if ports == "" {
@@ -255,7 +262,10 @@ func Hping3Flood(ctx context.Context, target string, rate int) (string, error) {
 
 	path, ok := findTool("hping3")
 	if !ok {
-		return "", fmt.Errorf("hping3 not found")
+		path, ok = findTool("hping")
+	}
+	if !ok {
+		return "", fmt.Errorf("no hping found (hping3/hping)")
 	}
 
 	if rate <= 0 {
@@ -875,6 +885,9 @@ func buildDNSQuery(domain string, qtype uint16) []byte {
 func parseDNSName(data []byte, offset, maxLen int) string {
 	name := ""
 	for offset < maxLen && data[offset] != 0 {
+		if data[offset]&0xC0 == 0xC0 {
+			break
+		}
 		length := int(data[offset])
 		offset++
 		if offset+length > maxLen {

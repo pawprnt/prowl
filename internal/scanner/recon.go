@@ -234,9 +234,9 @@ func SubdomainEnum(ctx context.Context, target string) (SubdomainsResult, error)
 			if !seen[d] {
 				seen[d] = true
 				result.Found = append(result.Found, d)
-				result.Sources = append(result.Sources, r.source)
 			}
 		}
+		result.Sources = append(result.Sources, r.source)
 		mu.Unlock()
 		printProgress("Found %d subdomains from %s", len(r.domains), r.source)
 	}

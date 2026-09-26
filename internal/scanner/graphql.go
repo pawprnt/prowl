@@ -103,7 +103,10 @@ func IntrospectSchema(ctx context.Context, endpoint string) (*GQLIntrospection, 
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 65536))
+	if err != nil {
+		return result, fmt.Errorf("failed to read response: %w", err)
+	}
 	bodyStr := string(body)
 
 	if resp.StatusCode == 200 && strings.Contains(bodyStr, "__schema") {
@@ -326,8 +329,12 @@ func TestInjection(ctx context.Context, endpoint string, queries []string) ([]GQ
 
 	for _, q := range queries {
 		for _, p := range injectionPayloads {
-			testQuery := fmt.Sprintf(`{"query":"{%s}", "variables":"${7*7}"}`, q)
-			req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(testQuery))
+			queryObj := map[string]string{"query": "{" + q + "}", "variables": "${7*7}"}
+			testQueryBytes, err := json.Marshal(queryObj)
+			if err != nil {
+				continue
+			}
+			req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(testQueryBytes)))
 			if err != nil {
 				continue
 			}
@@ -376,8 +383,12 @@ func TestAuthBypass(ctx context.Context, endpoint string) ([]GQLAuthFinding, err
 	}
 
 	for _, query := range sensitiveQueries {
-		gqlBody := fmt.Sprintf(`{"query":"%s"}`, query)
-		req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(gqlBody))
+		queryObj := map[string]string{"query": query}
+		gqlBodyBytes, err := json.Marshal(queryObj)
+		if err != nil {
+			continue
+		}
+		req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(gqlBodyBytes)))
 		if err != nil {
 			continue
 		}
@@ -489,9 +500,13 @@ func TestIntrospectionDoS(ctx context.Context, endpoint string) (*GQLDoSResult, 
 	depths := []int{10, 50, 100}
 	for _, depth := range depths {
 		nestedQuery := "{ __typename " + strings.Repeat("{ __typename ", depth) + strings.Repeat("}", depth) + " }"
-		gqlBody := fmt.Sprintf(`{"query":"%s"}`, nestedQuery)
+		queryObj := map[string]string{"query": nestedQuery}
+		gqlBodyBytes, err := json.Marshal(queryObj)
+		if err != nil {
+			continue
+		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(gqlBody))
+		req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(gqlBodyBytes)))
 		if err != nil {
 			continue
 		}

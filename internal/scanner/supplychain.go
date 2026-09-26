@@ -1084,9 +1084,9 @@ func SBOMGenerate(ctx context.Context, dir string) (*SupplyChainResult, error) {
 		}
 	}
 
-	for _, pkg := range result.Packages {
-		h := sha256.Sum256([]byte(pkg.Name + pkg.Version))
-		pkg.Hash = hex.EncodeToString(h[:8])
+	for i := range result.Packages {
+		h := sha256.Sum256([]byte(result.Packages[i].Name + result.Packages[i].Version))
+		result.Packages[i].Hash = hex.EncodeToString(h[:8])
 	}
 
 	printProgress("SBOM: %d components cataloged", len(result.Packages))

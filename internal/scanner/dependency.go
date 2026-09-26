@@ -257,6 +257,7 @@ func NpmAudit(ctx context.Context, projectDir string) (*DepAuditResult, error) {
 	args := []string{
 		"audit",
 		"--json",
+		"--prefix", projectDir,
 	}
 
 	out, err := runCommand(ctx, "npm", args...)

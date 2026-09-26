@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -14,6 +17,12 @@ type WordlistGenResult struct {
 	Path  string `json:"path"`
 	Count int    `json:"count"`
 	Size  int64  `json:"size"`
+}
+
+func tempFilePath(prefix string) string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return filepath.Join(os.TempDir(), prefix+"_"+hex.EncodeToString(b))
 }
 
 func CewlScrape(ctx context.Context, target string, depth, minLength int) (WordlistGenResult, error) {
@@ -31,7 +40,7 @@ func CewlScrape(ctx context.Context, target string, depth, minLength int) (Wordl
 		minLength = 3
 	}
 
-	outputFile := "/tmp/cewl_output.txt"
+	outputFile := tempFilePath("cewl_output")
 	args := []string{
 		"-d", fmt.Sprintf("%d", depth),
 		"-m", fmt.Sprintf("%d", minLength),
@@ -69,7 +78,7 @@ func CrunchGenerate(ctx context.Context, length, charset string, count int) (Wor
 		return WordlistGenResult{}, fmt.Errorf("crunch not found")
 	}
 
-	outputFile := "/tmp/crunch_output.txt"
+	outputFile := tempFilePath("crunch_output")
 	args := []string{length, length, charset, "-o", outputFile}
 	if count > 0 {
 		args = append(args, "-b", fmt.Sprintf("%dk", count))
@@ -112,7 +121,7 @@ func MnemonicGenerate(ctx context.Context, length int) (WordlistGenResult, error
 		}
 
 		chars := "abcdefghijklmnopqrstuvwxyz0123456789"
-		outputFile := "/tmp/mnemonic_output.txt"
+		outputFile := tempFilePath("mnemonic_output")
 		args := []string{
 			fmt.Sprintf("%d", length),
 			fmt.Sprintf("%d", length),
@@ -142,7 +151,7 @@ func MnemonicGenerate(ctx context.Context, length int) (WordlistGenResult, error
 		return result, nil
 	}
 
-	outputFile := "/tmp/mnemonic_output.txt"
+	outputFile := tempFilePath("mnemonic_output")
 	args := []string{"-o", outputFile, "-l", fmt.Sprintf("%d", length)}
 
 	_, err := runCommand(ctx, path, args...)
@@ -178,7 +187,7 @@ func PasslistGenerate(ctx context.Context, pattern string) (WordlistGenResult, e
 		}
 	}
 
-	outputFile := "/tmp/passlist_output.txt"
+	outputFile := tempFilePath("passlist_output")
 
 	output, err := runCommand(ctx, path, pattern)
 	if err != nil {
@@ -280,17 +289,17 @@ func HydraResume(ctx context.Context, host, port, service string) (*HydraResult,
 	}
 
 	outputStr := string(output)
-	re := regexp.MustCompile(`\[(\d+)\]\[(\S+)\] host:\s+\S+\s+login:\s+(\S+)\s+password:\s+(\S+)`)
+	re := regexp.MustCompile(`\[(\d+)\]\[(\S+)\]\s+host:\s+(\S+)\s+login:\s+(\S+)\s+password:\s+(\S+)`)
 	matches := re.FindAllStringSubmatch(outputStr, -1)
 
 	seen := make(map[string]bool)
 	for _, match := range matches {
-		key := match[3] + ":" + match[4]
+		key := match[4] + ":" + match[5]
 		if !seen[key] {
 			seen[key] = true
 			result.Found = append(result.Found, HydraLogin{
-				Username: match[3],
-				Password: match[4],
+				Username: match[4],
+				Password: match[5],
 			})
 		}
 	}
@@ -330,17 +339,17 @@ func HydraConditionalResearch(ctx context.Context, host, port, service, userlist
 	}
 
 	outputStr := string(output)
-	re := regexp.MustCompile(`\[(\d+)\]\[(\S+)\] host:\s+\S+\s+login:\s+(\S+)\s+password:\s+(\S+)`)
+	re := regexp.MustCompile(`\[(\d+)\]\[(\S+)\]\s+host:\s+(\S+)\s+login:\s+(\S+)\s+password:\s+(\S+)`)
 	matches := re.FindAllStringSubmatch(outputStr, -1)
 
 	seen := make(map[string]bool)
 	for _, match := range matches {
-		key := match[3] + ":" + match[4]
+		key := match[4] + ":" + match[5]
 		if !seen[key] {
 			seen[key] = true
 			result.Found = append(result.Found, HydraLogin{
-				Username: match[3],
-				Password: match[4],
+				Username: match[4],
+				Password: match[5],
 			})
 		}
 	}

@@ -868,12 +868,10 @@ func buildSNMPGetRequest(community, oid string) []byte {
 
 	pkt = append(pkt, 0x05, 0x00)
 
-	length := len(pkt) - 2
-	pkt[1] = byte(length)
-	pktLenOffset := len(pkt) - 1
-	dynamicLen := len(pkt[2:]) - 2
-	_ = dynamicLen
-	pkt[pktLenOffset] = byte(length)
+	pkt[1] = byte(len(pkt) - 2)
+	innerStart := 12 + len(community) + 2
+	innerLen := len(pkt) - innerStart - 1
+	pkt[innerStart+1] = byte(innerLen)
 
 	return pkt
 }

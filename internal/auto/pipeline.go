@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -361,6 +362,9 @@ func formatDuration(d time.Duration) string {
 func (p *Pipeline) printProgress(step, total int, name string) {
 	p.currentStep = step
 	p.totalSteps = total
+	if total == 0 {
+		return
+	}
 	elapsed := time.Since(p.startTime)
 	percent := float64(step) / float64(total) * 100
 	var eta string
@@ -483,10 +487,15 @@ func (p *Pipeline) saveOutput(tool, command, output string) {
 		Output:  output,
 	})
 	if p.OutputDir != "" {
-		os.MkdirAll(p.OutputDir, 0755)
+		if err := os.MkdirAll(p.OutputDir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "MkdirAll %s: %v\n", p.OutputDir, err)
+			return
+		}
 		safeName := strings.ReplaceAll(tool, " ", "_")
 		path := filepath.Join(p.OutputDir, safeName+".txt")
-		os.WriteFile(path, []byte(fmt.Sprintf("Command: %s\n\n%s", command, output)), 0644)
+		if err := os.WriteFile(path, []byte(fmt.Sprintf("Command: %s\n\n%s", command, output)), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "WriteFile %s: %v\n", path, err)
+		}
 	}
 }
 
@@ -512,8 +521,13 @@ func (p *Pipeline) saveResumeState(phase string, step int, findings []rpt.Findin
 	if err != nil {
 		return
 	}
-	os.MkdirAll(filepath.Dir(p.stateFile), 0755)
-	os.WriteFile(p.stateFile, data, 0644)
+	if err := os.MkdirAll(filepath.Dir(p.stateFile), 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "MkdirAll %s: %v\n", filepath.Dir(p.stateFile), err)
+		return
+	}
+	if err := os.WriteFile(p.stateFile, data, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "WriteFile %s: %v\n", p.stateFile, err)
+	}
 }
 
 func (p *Pipeline) loadResumeState() *ResumeState {
@@ -752,7 +766,10 @@ func (so *ScanOrchestrator) runPortScan(ctx context.Context, enum *EnumResult) {
 	if !so.pipeline.toolExists("nmap") {
 		return
 	}
-	args := []string{"-sV", "-sC", "--" + so.pipeline.Profile.PortScanLimit, "-T4", "-oX", "-", so.target}
+	portArgs := strings.Fields("--" + so.pipeline.Profile.PortScanLimit)
+	args := []string{"-sV", "-sC"}
+	args = append(args, portArgs...)
+	args = append(args, "-T4", "-oX", "-", so.target)
 	output, err := so.pipeline.runCommandWithTimeout(ctx, 10*time.Minute, "nmap", args...)
 	if err != nil {
 		return
@@ -1277,9 +1294,12 @@ func (ar *AutoReconEnhanced) runActivePhase(ctx context.Context, result *ReconRe
 
 	ar.pipeline.emitProgress("active", 1, 3, "nmap", 2, 3, "port scanning")
 	if ar.pipeline.toolExists("nmap") {
-		args := []string{"-sV", "-sC", "--" + ar.pipeline.Profile.PortScanLimit, "-T4", "-oX", "-", ar.target}
-		if output, err := ar.pipeline.runCommandWithTimeout(ctx, 10*time.Minute, "nmap", args...); err == nil {
-			ar.pipeline.saveOutput("nmap", fmt.Sprintf("nmap %s", strings.Join(args, " ")), output)
+		portArgs := strings.Fields("--" + ar.pipeline.Profile.PortScanLimit)
+		nmapArgs := []string{"-sV", "-sC"}
+		nmapArgs = append(nmapArgs, portArgs...)
+		nmapArgs = append(nmapArgs, "-T4", "-oX", "-", ar.target)
+		if output, err := ar.pipeline.runCommandWithTimeout(ctx, 10*time.Minute, "nmap", nmapArgs...); err == nil {
+			ar.pipeline.saveOutput("nmap", fmt.Sprintf("nmap %s", strings.Join(nmapArgs, " ")), output)
 		}
 	}
 
@@ -1588,10 +1608,14 @@ func (aad *AutoAD) userEnumeration(ctx context.Context, result *ADResult) {
 			result.Users = extractADUsers(output)
 		}
 	}
-	if aad.pipeline.toolExists("crackmapexec") {
-		if output, err := aad.pipeline.runCommand(ctx, "crackmapexec", "smb", aad.target,
+	if aad.pipeline.toolExists("crackmapexec") || aad.pipeline.toolExists("nxc") {
+		tool := "crackmapexec"
+		if !aad.pipeline.toolExists("crackmapexec") {
+			tool = "nxc"
+		}
+		if output, err := aad.pipeline.runCommand(ctx, tool, "smb", aad.target,
 			"--users"); err == nil {
-			aad.pipeline.saveOutput("cme-users", fmt.Sprintf("crackmapexec smb %s --users", aad.target), output)
+			aad.pipeline.saveOutput("cme-users", fmt.Sprintf("%s smb %s --users", tool, aad.target), output)
 			result.Users = append(result.Users, extractCMEUsers(output)...)
 			result.Users = uniqueList(result.Users)
 		}
@@ -1602,10 +1626,16 @@ func (aad *AutoAD) passwordSpray(ctx context.Context, result *ADResult) {
 	if !aad.pipeline.quiet {
 		fmt.Printf("\033[36m[ad]\033[0m Password spray (common passwords)\n")
 	}
-	if aad.pipeline.toolExists("crackmapexec") && len(result.Users) > 0 {
+	tool := ""
+	if aad.pipeline.toolExists("crackmapexec") {
+		tool = "crackmapexec"
+	} else if aad.pipeline.toolExists("nxc") {
+		tool = "nxc"
+	}
+	if tool != "" && len(result.Users) > 0 {
 		commonPasswords := []string{"Password1", "Password123!", "Summer2024!", "Winter2024!"}
 		for _, pw := range commonPasswords {
-			if output, err := aad.pipeline.runCommand(ctx, "crackmapexec", "smb", aad.target,
+			if output, err := aad.pipeline.runCommand(ctx, tool, "smb", aad.target,
 				"-u", result.Users[0], "-p", pw); err == nil {
 				if strings.Contains(strings.ToLower(output), "pwn3d!") {
 					f := rpt.Finding{
@@ -1720,8 +1750,12 @@ func (an *AutoNetwork) serviceDetection(ctx context.Context, result *NetworkResu
 		fmt.Printf("\033[36m[network]\033[0m Service detection\n")
 	}
 	if an.pipeline.toolExists("nmap") {
+		portArgs := strings.Fields("--" + an.pipeline.Profile.PortScanLimit)
+		nmapArgs := []string{"-sV", "-sC"}
+		nmapArgs = append(nmapArgs, portArgs...)
+		nmapArgs = append(nmapArgs, "-T4", an.target)
 		if output, err := an.pipeline.runCommandWithTimeout(ctx, 10*time.Minute,
-			"nmap", "-sV", "-sC", "--" + an.pipeline.Profile.PortScanLimit, "-T4", an.target); err == nil {
+			"nmap", nmapArgs...); err == nil {
 			an.pipeline.saveOutput("nmap-svc", fmt.Sprintf("nmap -sV -sC %s", an.target), output)
 			services := parseNmapServices(output)
 			if len(result.Hosts) > 0 {
@@ -2142,7 +2176,10 @@ func (p *Pipeline) runLiveHostDetection(ctx context.Context, target string) []st
 
 func (p *Pipeline) runPortScanLegacy(ctx context.Context, target string) string {
 	if p.toolExists("nmap") {
-		args := []string{"-sV", "-sC", "--" + p.Profile.PortScanLimit, "-T4", target}
+		portArgs := strings.Fields("--" + p.Profile.PortScanLimit)
+		args := []string{"-sV", "-sC"}
+		args = append(args, portArgs...)
+		args = append(args, "-T4", target)
 		output, err := p.runCommandWithTimeout(ctx, 10*time.Minute, "nmap", args...)
 		if err == nil {
 			p.saveOutput("nmap", fmt.Sprintf("nmap %s", strings.Join(args, " ")), output)
@@ -2450,7 +2487,11 @@ func (p *Pipeline) scanSecretsLegacy(ctx context.Context, target string, finding
 		{"Password in Code", "(?i)(password|passwd|pwd)\\s*[=:]\\s*['\"]?[^\\s'\"]{8,}['\"]?", rpt.SeverityHigh},
 	}
 	for _, pat := range patterns {
-		if strings.Contains(output, pat.pattern) || strings.Contains(strings.ToLower(output), strings.ToLower(pat.pattern)) {
+		re, err := regexp.Compile(pat.pattern)
+		if err != nil {
+			continue
+		}
+		if re.MatchString(output) {
 			f := rpt.Finding{
 				Title:       fmt.Sprintf("Potential %s exposed", pat.name),
 				Severity:    pat.severity,

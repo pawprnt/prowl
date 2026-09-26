@@ -1,4 +1,4 @@
-name: Build Prowl Kali Image
+name: Build Prowl Image
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  OUTPUT_NAME: "prowl-kali"
+  OUTPUT_NAME: "prowl-image"
 
 jobs:
   build:
@@ -34,45 +34,21 @@ jobs:
           cd nixos
           nix build .#prowl-kali --option sandbox false --verbose 2>&1 | tail -100
 
-      - name: Find and prepare image
+      - name: Prepare image
         run: |
           mkdir -p build/images
-          # nixos-generators outputs to result/
-          cp nixos/result/share/qemu/*.{qcow2,img} build/images/ 2>/dev/null || \
-          cp nixos/result/bin/*.{qcow2,img} build/images/ 2>/dev/null || \
+          cp -r nixos/result/share/qemu/* build/images/ 2>/dev/null || \
+          cp -r nixos/result/bin/* build/images/ 2>/dev/null || \
           find nixos/result -name "*.qcow2" -o -name "*.img" | head -1 | xargs -I{} cp {} build/images/
-          ls -la build/images/
 
-      - name: Inject prowl and bounty-data
-        run: |
           IMAGE=$(find build/images -name "*.qcow2" -o -name "*.img" | head -1)
           if [ -z "$IMAGE" ]; then
             echo "No image found"
             exit 1
           fi
 
-          echo "Connecting image via nbd..."
-          sudo modprobe nbd max_part=8
-          sudo qemu-nbd --connect=/dev/nbd0 "$IMAGE"
-          sleep 3
-
-          PART=$(lsblk -nrpo NAME,FSTYPE /dev/nbd0 2>/dev/null | grep ext4 | head -1 | awk '{print $1}')
-          if [ -z "$PART" ]; then
-            PART="/dev/nbd0p1"
-          fi
-          echo "Using partition: $PART"
-
-          sudo mkdir -p /mnt/image
-          sudo mount "$PART" /mnt/image
-
-          echo "Bundling bounty-data..."
-          sudo mkdir -p /mnt/image/home/kali/.prowl/bounty-data
-          sudo cp -r data/bounty-data/* /mnt/image/home/kali/.prowl/bounty-data/
-          sudo chown -R 1000:1000 /mnt/image/home/kali/.prowl
-
-          echo "Unmounting..."
-          sudo umount /mnt/image
-          sudo qemu-nbd --disconnect /dev/nbd0
+          echo "Image: $IMAGE"
+          ls -la build/images/
 
       - name: Compress image
         run: |
@@ -117,7 +93,7 @@ jobs:
       - name: Upload parts as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.OUTPUT_NAME }}-image
+          name: ${{ env.OUTPUT_NAME }}
           path: splits/
           retention-days: 5
 
@@ -129,7 +105,7 @@ jobs:
             splits/${{ env.OUTPUT_NAME }}.part.*
             splits/manifest.json
           body: |
-            ## Prowl Kali Image ${{ github.ref_name }}
+            ## Prowl Image ${{ github.ref_name }}
 
             NixOS-based security research VM with prowl and tools pre-installed.
             Reproducible, declarative, minimal.
@@ -145,7 +121,7 @@ jobs:
               -net user,hostfwd=tcp::2222-:22 -net nic
 
             # SSH
-            sshpass -p kali ssh -p 2222 kali@localhost
+            ssh prowl@localhost -p 2222
             ```
           draft: false
           prerelease: false
@@ -153,6 +129,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          sudo qemu-nbd --disconnect /dev/nbd0 2>/dev/null || true
-          sudo umount /mnt/image 2>/dev/null || true
-          sudo rm -rf build/ splits/ *.qcow2 nixos/result
+          rm -rf build/ splits/ *.qcow2 nixos/result

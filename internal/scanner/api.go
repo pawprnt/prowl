@@ -351,7 +351,9 @@ func testJWTWeaknesses(ctx context.Context, client *http.Client, url string, hea
 	if err != nil {
 		return findings
 	}
-	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	resp.Body.Close()
 
 	authHeader := resp.Header.Get("WWW-Authenticate")
 	if authHeader == "" {
@@ -364,7 +366,6 @@ func testJWTWeaknesses(ctx context.Context, client *http.Client, url string, hea
 		}
 	}
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 	bodyStr := string(body)
 
 	jwtRe := regexp.MustCompile(`eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+`)

@@ -186,7 +186,10 @@ func Crawl(ctx context.Context, startURL string, depth int) (*CrawlResult, error
 		}
 		defer resp.Body.Close()
 
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 65536))
+		if err != nil {
+			return
+		}
 		bodyStr := string(body)
 
 		page := CrawledPage{
@@ -534,7 +537,11 @@ func FindSensitiveFiles(ctx context.Context, target string) (*SensitiveFileResul
 		}
 
 		reqURL := baseURL + sf.path
-		resp, err := client.Head(reqURL)
+		req, err := http.NewRequestWithContext(ctx, "HEAD", reqURL, nil)
+		if err != nil {
+			continue
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			continue
 		}

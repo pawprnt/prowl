@@ -45,6 +45,9 @@ type PriorityItem struct {
 }
 
 func NewReportView(report *Report) ReportView {
+	if report == nil {
+		return ReportView{}
+	}
 	stats := CalculateStats(report)
 	bars := buildSeverityBars(stats)
 	pie := buildASCIIPieChart(stats)
@@ -74,7 +77,9 @@ func NewReportView(report *Report) ReportView {
 			Index:         i + 1,
 		}
 		if f.CWE != "" {
-			fv.CWEName = GetCWEDescription(f.CWE)
+			if cwe, ok := GetCWE(f.CWE); ok {
+				fv.CWEName = cwe.Name
+			}
 			fv.CWEDesc = GetCWEDescription(f.CWE)
 		}
 		for _, rid := range f.RelatedIDs {
@@ -153,8 +158,57 @@ func buildASCIIPieChart(stats Stats) string {
 	if total == 0 {
 		return "No findings to display."
 	}
+
+	const reset = "\033[0m"
+	const red = "\033[31m"
+	const yellow = "\033[33m"
+	const green = "\033[32m"
+	const blue = "\033[34m"
+	const orange = "\033[38;5;208m"
+
+	type sevStyle struct {
+		name  string
+		count int
+		filled string
+		empty  string
+		color  string
+	}
+	sevs := []sevStyle{
+		{"Critical", stats.Critical, "\u2593", "\u2591", red},
+		{"High", stats.High, "\u2593", "\u2591", orange},
+		{"Medium", stats.Medium, "\u2593", "\u2591", yellow},
+		{"Low", stats.Low, "\u2593", "\u2591", green},
+		{"Info", stats.Info, "\u2593", "\u2591", blue},
+	}
+
 	var sb strings.Builder
-	width := 40
+	width := 30
+	for _, sev := range sevs {
+		if sev.count == 0 {
+			continue
+		}
+		barLen := (sev.count * width) / total
+		if barLen == 0 && sev.count > 0 {
+			barLen = 1
+		}
+		filled := strings.Repeat(sev.filled, barLen)
+		empty := strings.Repeat(sev.empty, width-barLen)
+		pct := float64(sev.count) / float64(total) * 100
+		sb.WriteString(fmt.Sprintf("  %s%-10s%s %s%s%s%s %3d (%5.1f%%)\n",
+			sev.color, sev.name, reset,
+			sev.color, filled, empty, reset,
+			sev.count, pct))
+	}
+	return sb.String()
+}
+
+func buildASCIIPieChartPlain(stats Stats) string {
+	total := stats.Total
+	if total == 0 {
+		return "No findings to display."
+	}
+	var sb strings.Builder
+	width := 30
 	for _, sev := range []struct {
 		name  string
 		count int
@@ -169,11 +223,30 @@ func buildASCIIPieChart(stats Stats) string {
 			continue
 		}
 		barLen := (sev.count * width) / total
-		bar := strings.Repeat("#", barLen)
+		if barLen == 0 && sev.count > 0 {
+			barLen = 1
+		}
+		filled := strings.Repeat("\u2593", barLen)
+		empty := strings.Repeat("\u2591", width-barLen)
 		pct := float64(sev.count) / float64(total) * 100
-		sb.WriteString(fmt.Sprintf("  %-10s [%-40s] %3d (%5.1f%%)\n", sev.name, bar, sev.count, pct))
+		sb.WriteString(fmt.Sprintf("  %-10s %s%s %3d (%5.1f%%)\n", sev.name, filled, empty, sev.count, pct))
 	}
 	return sb.String()
+}
+
+func severityEmoji(sev Severity) string {
+	switch sev {
+	case SeverityCritical:
+		return "\U0001f534"
+	case SeverityHigh:
+		return "\U0001f7e0"
+	case SeverityMedium:
+		return "\U0001f7e1"
+	case SeverityLow:
+		return "\U0001f7e2"
+	default:
+		return "\U0001f535"
+	}
 }
 
 func getSeverityClass(sev Severity) string {
@@ -209,6 +282,30 @@ func buildMarkdown(report *Report, view ReportView) string {
 		sb.WriteString(fmt.Sprintf("This report presents the findings of a security assessment conducted against %s. A total of %d vulnerabilities were identified across %d severity levels.\n\n",
 			report.Target, view.Stats.Total, countNonZero(view.Stats)))
 	}
+
+	if report.RiskScore > 0 {
+		sb.WriteString("## Risk Assessment\n\n")
+		sb.WriteString(fmt.Sprintf("| Metric | Value |\n|--------|-------|\n"))
+		sb.WriteString(fmt.Sprintf("| Risk Score | **%.1f/100** |\n", report.RiskScore))
+		sb.WriteString(fmt.Sprintf("| Risk Grade | **%s** |\n", report.RiskGrade))
+		sb.WriteString(fmt.Sprintf("| Total Findings | **%d** |\n", view.Stats.Total))
+		sb.WriteString(fmt.Sprintf("| Severity Levels | **%d** |\n\n", countNonZero(view.Stats)))
+	}
+
+	sb.WriteString("## Quick Stats\n\n")
+	sb.WriteString("| Metric | Value |\n|--------|-------|\n")
+	sb.WriteString(fmt.Sprintf("| Target | %s |\n", report.Target))
+	sb.WriteString(fmt.Sprintf("| Scan Date | %s |\n", report.ScanDate.Format("2006-01-02")))
+	sb.WriteString(fmt.Sprintf("| Scanner | %s |\n", report.Scanner))
+	if report.RiskScore > 0 {
+		sb.WriteString(fmt.Sprintf("| Risk Score | %.1f/100 (Grade: %s) |\n", report.RiskScore, report.RiskGrade))
+	}
+	sb.WriteString(fmt.Sprintf("| Critical | %d |\n", view.Stats.Critical))
+	sb.WriteString(fmt.Sprintf("| High | %d |\n", view.Stats.High))
+	sb.WriteString(fmt.Sprintf("| Medium | %d |\n", view.Stats.Medium))
+	sb.WriteString(fmt.Sprintf("| Low | %d |\n", view.Stats.Low))
+	sb.WriteString(fmt.Sprintf("| Info | %d |\n", view.Stats.Info))
+	sb.WriteString(fmt.Sprintf("| **Total** | **%d** |\n\n", view.Stats.Total))
 
 	sb.WriteString("## Scope\n\n")
 	if report.Scope != "" {
@@ -255,7 +352,7 @@ func buildMarkdown(report *Report, view ReportView) string {
 	sb.WriteString("## Findings\n\n")
 	SortFindings(report, "severity")
 	for i, f := range report.Findings {
-		sb.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, f.Title))
+		sb.WriteString(fmt.Sprintf("### %d. %s %s\n\n", i+1, severityEmoji(f.Severity), f.Title))
 		sb.WriteString(fmt.Sprintf("| Field | Value |\n|-------|-------|\n"))
 		sb.WriteString(fmt.Sprintf("| Severity | **%s** |\n", f.Severity))
 		if f.CVSS > 0 {
@@ -323,7 +420,19 @@ func buildMarkdown(report *Report, view ReportView) string {
 
 	sb.WriteString("## Severity Distribution\n\n")
 	sb.WriteString("```\n")
-	sb.WriteString(view.SeverityPieChart)
+	sb.WriteString(buildASCIIPieChartPlain(view.Stats))
+	sb.WriteString("```\n\n")
+	sb.WriteString("## Severity Distribution (Visual)\n\n")
+	sb.WriteString("```\n")
+	for _, bar := range view.SeverityBars {
+		filled := int(bar.Percent / 100 * 30)
+		if filled == 0 && bar.Count > 0 {
+			filled = 1
+		}
+		filledStr := strings.Repeat("\u2593", filled)
+		emptyStr := strings.Repeat("\u2591", 30-filled)
+		sb.WriteString(fmt.Sprintf("  %-10s %s%s %d (%.1f%%)\n", bar.Label, filledStr, emptyStr, bar.Count, bar.Percent))
+	}
 	sb.WriteString("```\n\n")
 
 	if len(report.RawOutput) > 0 {
@@ -574,6 +683,58 @@ func GenerateAIEnhancedMarkdown(report *Report) string {
 		return GenerateMarkdown(report)
 	}
 	return result
+}
+
+func GenerateQuickSummary(report *Report) string {
+	stats := CalculateStats(report)
+	target := report.Target
+
+	var critPart, highPart, medPart, lowPart string
+	if stats.Critical > 0 {
+		critPart = fmt.Sprintf("%d critical", stats.Critical)
+	}
+	if stats.High > 0 {
+		highPart = fmt.Sprintf("%d high", stats.High)
+	}
+	if stats.Medium > 0 {
+		medPart = fmt.Sprintf("%d medium", stats.Medium)
+	}
+	if stats.Low > 0 {
+		lowPart = fmt.Sprintf("%d low", stats.Low)
+	}
+
+	var sevParts []string
+	for _, p := range []string{critPart, highPart, medPart, lowPart} {
+		if p != "" {
+			sevParts = append(sevParts, p)
+		}
+	}
+	sevStr := strings.Join(sevParts, ", ")
+	if sevStr == "" {
+		sevStr = "0"
+	}
+
+	gradeStr := "N/A"
+	if report.RiskScore > 0 {
+		gradeStr = fmt.Sprintf("%.0f/100 (Grade: %s)", report.RiskScore, report.RiskGrade)
+	}
+
+	var topIssues []string
+	SortFindings(report, "severity")
+	limit := 3
+	if len(report.Findings) < limit {
+		limit = len(report.Findings)
+	}
+	for i := 0; i < limit; i++ {
+		topIssues = append(topIssues, report.Findings[i].Title)
+	}
+	topStr := "none"
+	if len(topIssues) > 0 {
+		topStr = strings.Join(topIssues, "; ")
+	}
+
+	return fmt.Sprintf("Security assessment of %s identified %d vulnerabilities: %s. Risk score: %s. Top issues: %s.",
+		target, stats.Total, sevStr, gradeStr, topStr)
 }
 
 func GenerateAIExecutiveSummary(report *Report) string {

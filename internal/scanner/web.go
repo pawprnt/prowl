@@ -201,7 +201,11 @@ func OpenRedirectExtended(ctx context.Context, target string) (*RedirectResult, 
 		for _, payload := range payloads {
 			testURL := url + "?" + param + "=" + payload
 
-			resp, err := client.Get(testURL)
+			req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
+			if err != nil {
+				continue
+			}
+			resp, err := client.Do(req)
 			if err != nil {
 				continue
 			}
@@ -317,7 +321,11 @@ func FileInclusion(ctx context.Context, target string) (*FileIncResult, error) {
 	for _, p := range lfiPatterns {
 		testURL := url + "?file=" + p.pattern
 
-		resp, err := client.Get(testURL)
+		req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
+		if err != nil {
+			continue
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			continue
 		}
@@ -347,7 +355,11 @@ func FileInclusion(ctx context.Context, target string) (*FileIncResult, error) {
 	for _, payload := range rfiPayloads {
 		testURL := url + "?file=" + payload
 
-		resp, err := client.Get(testURL)
+		req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
+		if err != nil {
+			continue
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			continue
 		}
@@ -472,7 +484,7 @@ func PrototypePollution(ctx context.Context, target string) (*PrototypeResult, e
 		resp.Body.Close()
 
 		bodyStr := string(body)
-		if strings.Contains(bodyStr, "polluted") || strings.Contains(bodyStr, "test") {
+		if strings.Contains(bodyStr, "polluted") {
 			result.Vulns = append(result.Vulns, PrototypeVuln{
 				Param:    p.param,
 				Payload:  p.payload,

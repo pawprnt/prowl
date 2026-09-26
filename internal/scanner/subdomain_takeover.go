@@ -104,7 +104,7 @@ func CheckDangling(ctx context.Context, cname string) (string, bool, string) {
 	cnameLower := strings.ToLower(cname)
 
 	for suffix, info := range takeoverServices {
-		if strings.HasSuffix(cnameLower, suffix) || strings.Contains(cnameLower, suffix) {
+		if strings.HasSuffix(cnameLower, suffix) {
 			host := cname
 			if idx := strings.Index(host, ":"); idx != -1 {
 				host = host[:idx]
@@ -140,7 +140,7 @@ func CheckSubdomainTakeover(ctx context.Context, subdomain string) (*SubdomainTa
 		entry.Detail = detail
 
 		for suffix, info := range takeoverServices {
-			if strings.HasSuffix(strings.ToLower(cname), suffix) || strings.Contains(strings.ToLower(cname), suffix) {
+			if strings.HasSuffix(strings.ToLower(cname), suffix) {
 				entry.Severity = info.severity
 				break
 			}

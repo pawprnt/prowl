@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -173,22 +174,22 @@ func WaybackURLs(ctx context.Context, domain string) (WaybackResult, error) {
 	printProgress("Querying Wayback Machine for %s", domain)
 	result := WaybackResult{Domain: domain}
 
-	url := fmt.Sprintf("https://web.archive.org/cdx/search/cdx?url=%s/*&output=json&fl=original&collapse=urlkey&limit=5000", domain)
+	url := fmt.Sprintf("https://web.archive.org/cdx/search/cdx?url=%s/*&output=json&fl=original&collapse=urlkey&limit=5000", url.PathEscape(domain))
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return result, nil
+		return result, fmt.Errorf("failed to fetch wayback URLs: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return result, nil
+		return result, fmt.Errorf("wayback returned status %d", resp.StatusCode)
 	}
 
 	var data [][]string
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return result, nil
+		return result, fmt.Errorf("failed to decode wayback response: %w", err)
 	}
 
 	seen := make(map[string]bool)
@@ -215,7 +216,7 @@ func WaybackRobots(ctx context.Context, domain string) (string, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("failed to fetch wayback robots: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -263,7 +264,7 @@ func SubdomainAnubis(ctx context.Context, domain string) ([]string, error) {
 	printProgress("Querying Anubis-DB for %s", domain)
 	var subdomains []string
 
-	url := fmt.Sprintf("https://jldc.me/anubis/subdomains/%s", domain)
+	url := fmt.Sprintf("https://jldc.me/anubis/subdomains/%s", url.PathEscape(domain))
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(url)
@@ -294,7 +295,7 @@ func SubdomainAlienVault(ctx context.Context, domain string) ([]string, error) {
 	printProgress("Querying AlienVault OTX for %s", domain)
 	var subdomains []string
 
-	url := fmt.Sprintf("https://otx.alienvault.com/api/v1/indicators/domain/%s/passive_dns", domain)
+	url := fmt.Sprintf("https://otx.alienvault.com/api/v1/indicators/domain/%s/passive_dns", url.PathEscape(domain))
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)
@@ -333,7 +334,7 @@ func SubdomainVirusTotal(ctx context.Context, domain string) ([]string, error) {
 	printProgress("Querying VirusTotal for %s", domain)
 	var subdomains []string
 
-	url := fmt.Sprintf("https://www.virustotal.com/api/v3/domains/%s/subdomains?limit=40", domain)
+	url := fmt.Sprintf("https://www.virustotal.com/api/v3/domains/%s/subdomains?limit=40", url.PathEscape(domain))
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequest("GET", url, nil)

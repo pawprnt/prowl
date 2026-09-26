@@ -70,6 +70,9 @@ func KismetScan(ctx context.Context, iface string) (*WirelessResult, error) {
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scanning kismet output: %w", err)
+	}
 
 	return result, nil
 }
@@ -113,6 +116,9 @@ func AirodumpScan(ctx context.Context, iface string) (*WirelessResult, error) {
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scanning airodump output: %w", err)
+	}
 
 	return result, nil
 }
@@ -128,7 +134,13 @@ func WiFiInfo(ctx context.Context, iface string) (*WiFiInfoResult, error) {
 		}
 	}
 
-	output, err := runCommand(ctx, path, "dev", iface)
+	var output []byte
+	var err error
+	if strings.HasSuffix(path, "iwconfig") {
+		output, err = runCommand(ctx, path, iface)
+	} else {
+		output, err = runCommand(ctx, path, "dev", iface)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +189,9 @@ func WiFiInfo(ctx context.Context, iface string) (*WiFiInfoResult, error) {
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scanning iw output: %w", err)
+	}
 
 	return info, nil
 }
@@ -212,7 +227,7 @@ func WiFiScan(ctx context.Context, iface string) (*WirelessResult, error) {
 			current = WiFiNetwork{}
 			parts := strings.Fields(line)
 			if len(parts) >= 2 {
-				current.BSSID = strings.TrimSuffix(parts[1], "(on")
+				current.BSSID = strings.SplitN(parts[1], "(", 2)[0]
 			}
 		}
 
@@ -232,6 +247,9 @@ func WiFiScan(ctx context.Context, iface string) (*WirelessResult, error) {
 		if strings.Contains(line, "WPA") || strings.Contains(line, "WEP") || strings.Contains(line, "OWE") {
 			current.Encryption = "encrypted"
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scanning iw scan output: %w", err)
 	}
 
 	if current.BSSID != "" {

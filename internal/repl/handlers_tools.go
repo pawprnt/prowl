@@ -34,8 +34,8 @@ func (r *REPL) cmdGobuster(args []string) error {
 	}
 
 	fmt.Fprintf(os.Stdout, "\n\033[1;36mgobuster results for %s:\033[0m\n", target)
-	for _, r := range results {
-		fmt.Fprintf(os.Stdout, "%s [%d] %d bytes\n", r.URL, r.Status, r.Size)
+	for _, res := range results {
+		fmt.Fprintf(os.Stdout, "%s [%d] %d bytes\n", res.URL, res.Status, res.Size)
 	}
 	fmt.Fprintf(os.Stdout, "\ntotal: %d results\n", len(results))
 	return nil
@@ -63,8 +63,8 @@ func (r *REPL) cmdWfuzz(args []string) error {
 	}
 
 	fmt.Fprintf(os.Stdout, "\n\033[1;36mwfuzz results for %s:\033[0m\n", target)
-	for _, r := range results {
-		fmt.Fprintf(os.Stdout, "%s [%d] %d bytes\n", r.URL, r.Status, r.Size)
+	for _, res := range results {
+		fmt.Fprintf(os.Stdout, "%s [%d] %d bytes\n", res.URL, res.Status, res.Size)
 	}
 	fmt.Fprintf(os.Stdout, "\ntotal: %d results\n", len(results))
 	return nil
@@ -92,8 +92,8 @@ func (r *REPL) cmdFfuf(args []string) error {
 	}
 
 	fmt.Fprintf(os.Stdout, "\n\033[1;36mffuf results for %s:\033[0m\n", target)
-	for _, r := range results {
-		fmt.Fprintf(os.Stdout, "%s [%d] %d bytes\n", r.URL, r.Status, r.Size)
+	for _, res := range results {
+		fmt.Fprintf(os.Stdout, "%s [%d] %d bytes\n", res.URL, res.Status, res.Size)
 	}
 	fmt.Fprintf(os.Stdout, "\ntotal: %d results\n", len(results))
 	return nil
@@ -113,8 +113,8 @@ func (r *REPL) cmdFuzzFull(args []string) error {
 	}
 
 	fmt.Fprintf(os.Stdout, "\n\033[1;36mfull fuzz results for %s:\033[0m\n", target)
-	for _, r := range results {
-		fmt.Fprintf(os.Stdout, "%s [%d] %d bytes\n", r.URL, r.Status, r.Size)
+	for _, res := range results {
+		fmt.Fprintf(os.Stdout, "%s [%d] %d bytes\n", res.URL, res.Status, res.Size)
 	}
 	fmt.Fprintf(os.Stdout, "\ntotal: %d unique results\n", len(results))
 	return nil

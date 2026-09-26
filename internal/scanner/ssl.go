@@ -152,7 +152,6 @@ func testProtocols(ctx context.Context, host string) []ProtocolResult {
 		minVer uint16
 		maxVer uint16
 	}{
-		{"SSLv2", tls.VersionSSL30, tls.VersionSSL30},
 		{"SSLv3", tls.VersionSSL30, tls.VersionSSL30},
 		{"TLS 1.0", tls.VersionTLS10, tls.VersionTLS10},
 		{"TLS 1.1", tls.VersionTLS11, tls.VersionTLS11},
@@ -467,10 +466,14 @@ func testKeyExchange(ctx context.Context, host string) []KeyExchangeInfo {
 
 	state := conn.ConnectionState()
 	if state.CipherSuite != 0 {
-		switch {
-		case state.CipherSuite >= tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
-			results = append(results, KeyExchangeInfo{Type: "ECDHE", Bits: 256})
-		case state.CipherSuite >= tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:
+		switch state.CipherSuite {
+		case tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
 			results = append(results, KeyExchangeInfo{Type: "ECDHE", Bits: 256})
 		default:
 			results = append(results, KeyExchangeInfo{Type: "RSA", Bits: 2048})

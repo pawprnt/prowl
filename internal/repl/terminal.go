@@ -18,7 +18,9 @@ func (r *REPL) runWithSpinner(fn func() error) {
 	err := fn()
 
 	if r.oldState != nil {
-		term.MakeRaw(int(syscall.Stdin))
+		if _, err := term.MakeRaw(int(syscall.Stdin)); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to restore raw mode: %v\n", err)
+		}
 	}
 
 	if err != nil {

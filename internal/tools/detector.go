@@ -1,10 +1,13 @@
 package tools
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -34,9 +37,51 @@ const (
 	CategoryOther         Category = "Other"
 )
 
-var (
-	isTerminal = term.IsTerminal(int(os.Stdout.Fd()))
+type OSType string
+
+const (
+	OSNixOS    OSType = "NixOS"
+	OSKali     OSType = "Kali"
+	OSUbuntu   OSType = "Ubuntu"
+	OSDebian   OSType = "Debian"
+	OSFedora   OSType = "Fedora"
+	OSArch     OSType = "Arch"
+	OSUnknown  OSType = "Unknown"
 )
+
+type PackageMgr string
+
+const (
+	PkgMgrNix    PackageMgr = "nix"
+	PkgMgrApt    PackageMgr = "apt"
+	PkgMgrDnf    PackageMgr = "dnf"
+	PkgMgrPacman PackageMgr = "pacman"
+	PkgMgrBrew   PackageMgr = "brew"
+	PkgMgrNone   PackageMgr = "none"
+)
+
+type OSInfo struct {
+	Type         OSType
+	Name         string
+	DisplayName  string
+	Version      string
+	PkgManager   PackageMgr
+	IsNixOS      bool
+}
+
+var (
+	isTerminal  = term.IsTerminal(int(os.Stdout.Fd()))
+	cachedOS    *OSInfo
+	osOnce      sync.Once
+	skipInstall = false
+	skipMu      sync.RWMutex
+)
+
+func SetSkipInstall(skip bool) {
+	skipMu.Lock()
+	defer skipMu.Unlock()
+	skipInstall = skip
+}
 
 const (
 	colorReset   = "\033[0m"
@@ -47,7 +92,7 @@ const (
 	colorMagenta = "\033[35m"
 	colorCyan    = "\033[36m"
 	colorBold    = "\033[1m"
-	colorDim     = "\033[2m"
+	colorDim     = "\033[90m"
 )
 
 func colorize(color, text string) string {
@@ -55,6 +100,86 @@ func colorize(color, text string) string {
 		return text
 	}
 	return color + text + colorReset
+}
+
+func DetectOS() *OSInfo {
+	osOnce.Do(func() {
+		info := &OSInfo{
+			Type:       OSUnknown,
+			PkgManager: PkgMgrNone,
+		}
+
+		if data, err := os.ReadFile("/etc/os-release"); err == nil {
+			scanner := bufio.NewScanner(strings.NewReader(string(data)))
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.HasPrefix(line, "ID=") {
+					info.Name = strings.Trim(strings.TrimPrefix(line, "ID="), "\"")
+				}
+				if strings.HasPrefix(line, "VERSION_ID=") {
+					info.Version = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), "\"")
+				}
+				if strings.HasPrefix(line, "PRETTY_NAME=") {
+					info.DisplayName = strings.Trim(strings.TrimPrefix(line, "PRETTY_NAME="), "\"")
+				}
+			}
+		}
+
+		if info.DisplayName != "" {
+			info.Name = info.DisplayName
+		}
+
+		lowerName := strings.ToLower(info.Name)
+		switch {
+		case strings.Contains(lowerName, "nixos"):
+			info.Type = OSNixOS
+			info.IsNixOS = true
+			info.PkgManager = PkgMgrNix
+		case strings.Contains(lowerName, "kali"):
+			info.Type = OSKali
+			info.PkgManager = PkgMgrApt
+		case strings.Contains(lowerName, "ubuntu"):
+			info.Type = OSUbuntu
+			info.PkgManager = PkgMgrApt
+		case strings.Contains(lowerName, "debian"):
+			info.Type = OSDebian
+			info.PkgManager = PkgMgrApt
+		case strings.Contains(lowerName, "fedora"):
+			info.Type = OSFedora
+			info.PkgManager = PkgMgrDnf
+		case strings.Contains(lowerName, "arch"):
+			info.Type = OSArch
+			info.PkgManager = PkgMgrPacman
+		}
+
+		if info.PkgManager == PkgMgrNone {
+			for _, mgr := range []struct {
+				bin  string
+				name PackageMgr
+			}{
+				{"nix", PkgMgrNix},
+				{"apt", PkgMgrApt},
+				{"dnf", PkgMgrDnf},
+				{"pacman", PkgMgrPacman},
+				{"brew", PkgMgrBrew},
+			} {
+				if _, err := exec.LookPath(mgr.bin); err == nil {
+					info.PkgManager = mgr.name
+					break
+				}
+			}
+		}
+
+		cachedOS = info
+	})
+	return cachedOS
+}
+
+func (o *OSInfo) String() string {
+	if o.Version != "" {
+		return fmt.Sprintf("%s %s", o.Name, o.Version)
+	}
+	return o.Name
 }
 
 type ToolInfo struct {
@@ -77,9 +202,8 @@ var allTools = []ToolInfo{
 	// Scanning & Enumeration
 	{Name: "nmap", Category: CategoryScanning, Binary: "nmap", PackageApt: "nmap", PackageNix: "nmap", Description: "Network discovery and security auditing"},
 	{Name: "masscan", Category: CategoryScanning, Binary: "masscan", PackageApt: "masscan", PackageNix: "masscan", Description: "TCP port scanner, transmits 10M packets/sec"},
-	{Name: "unicornscan", Category: CategoryScanning, Binary: "unicornscan", PackageApt: "unicornscan", PackageNix: "unicornscan", Description: "Asynchronous TCP and UDP scanner"},
 	{Name: "zmap", Category: CategoryScanning, Binary: "zmap", PackageApt: "zmap", PackageNix: "zmap", Description: "Fast single packet network scanner"},
-	{Name: "hping3", Category: CategoryScanning, Binary: "hping3", PackageApt: "hping3", PackageNix: "hping3", Description: "Active network smashing tool"},
+	{Name: "hping", Category: CategoryScanning, Binary: "hping", PackageApt: "hping3", PackageNix: "hping", Description: "Active network smashing tool"},
 	{Name: "ndiff", Category: CategoryScanning, Binary: "ndiff", PackageApt: "ndiff", PackageNix: "ndiff", Description: "Nmap output diff utility"},
 	{Name: "ncat", Category: CategoryScanning, Binary: "ncat", PackageApt: "ncat", PackageNix: "ncat", Description: "Netcat reimagined with NSE"},
 	{Name: "nping", Category: CategoryScanning, Binary: "nping", PackageApt: "nping", PackageNix: "nping", Description: "Network packet generation/response analysis"},
@@ -131,15 +255,17 @@ var allTools = []ToolInfo{
 	{Name: "wireshark", Category: CategoryNetwork, Binary: "wireshark", PackageApt: "wireshark", PackageNix: "wireshark", Description: "Network protocol analyzer GUI"},
 	{Name: "netcat", Category: CategoryNetwork, Binary: "nc", PackageApt: "netcat", PackageNix: "netcat-openbsd", Description: "TCP/UDP socket connection utility"},
 	{Name: "socat", Category: CategoryNetwork, Binary: "socat", PackageApt: "socat", PackageNix: "socat", Description: "Multipurpose relay for bidirectional data streams"},
-	{Name: "proxychains", Category: CategoryNetwork, Binary: "proxychains", PackageApt: "proxychains4", PackageNix: "proxychains", Description: "Redirect TCP connections through proxy servers"},
+	{Name: "proxychains", Category: CategoryNetwork, Binary: "proxychains", PackageApt: "proxychains4", PackageNix: "proxychains-ng", Description: "Redirect TCP connections through proxy servers"},
+	{Name: "proxychains-ng", Category: CategoryNetwork, Binary: "proxychains", PackageApt: "proxychains4", PackageNix: "proxychains-ng", Description: "Redirect TCP connections through proxy servers"},
 	{Name: "redsocks", Category: CategoryNetwork, Binary: "redsocks", PackageApt: "redsocks", PackageNix: "redsocks", Description: "Transparent TCP-to-proxy redirector"},
 	{Name: "tor", Category: CategoryNetwork, Binary: "tor", PackageApt: "tor", PackageNix: "tor", Description: "The Onion Router anonymity network"},
 
 	// Post-Exploitation
 	{Name: "responder", Category: CategoryPostExploit, Binary: "responder", PackageApt: "responder", PackageNix: "responder", Description: "LLMNR, NBT-NS and MDNS poisoner"},
 	{Name: "impacket", Category: CategoryPostExploit, Binary: "impacket-smbclient", PackageApt: "python3-impacket", PackageNix: "impacket", Description: "Network protocols toolkit"},
-	{Name: "crackmapexec", Category: CategoryPostExploit, Binary: "crackmapexec", PackageApt: "crackmapexec", PackageNix: "crackmapexec", Description: "Swiss army knife for pentesting Active Directory"},
-	{Name: "cme", Category: CategoryPostExploit, Binary: "crackmapexec", PackageApt: "crackmapexec", PackageNix: "crackmapexec", Description: "CrackMapExec alias"},
+	{Name: "crackmapexec", Category: CategoryPostExploit, Binary: "crackmapexec", PackageApt: "crackmapexec", PackageNix: "netexec", Description: "Swiss army knife for pentesting Active Directory"},
+	{Name: "cme", Category: CategoryPostExploit, Binary: "crackmapexec", PackageApt: "crackmapexec", PackageNix: "netexec", Description: "CrackMapExec alias"},
+	{Name: "nxc", Category: CategoryPostExploit, Binary: "nxc", PackageApt: "netexec", PackageNix: "netexec", Description: "NetExec (CME fork)"},
 	{Name: "enum4linux", Category: CategoryPostExploit, Binary: "enum4linux", PackageApt: "enum4linux", PackageNix: "enum4linux", Description: "SMB/NetBIOS enumeration tool"},
 	{Name: "smbclient", Category: CategoryPostExploit, Binary: "smbclient", PackageApt: "smbclient", PackageNix: "samba-client", Description: "SMB/CIFS client for Unix"},
 	{Name: "smbmap", Category: CategoryPostExploit, Binary: "smbmap", PackageApt: "smbmap", PackageNix: "smbmap", Description: "SMB enumeration and file sharing tool"},
@@ -301,8 +427,9 @@ var kaliPackageMap = map[string]string{
 	"tor":               "tor",
 	"responder":         "responder",
 	"impacket":          "python3-impacket",
-	"crackmapexec":      "crackmapexec",
-	"cme":               "crackmapexec",
+	"crackmapexec":      "netexec",
+	"cme":               "netexec",
+	"nxc":               "netexec",
 	"enum4linux":        "enum4linux",
 	"smbclient":         "smbclient",
 	"smbmap":            "smbmap",
@@ -444,8 +571,9 @@ var nixPackageMap = map[string]string{
 	"tor":               "tor",
 	"responder":         "responder",
 	"impacket":          "impacket",
-	"crackmapexec":      "crackmapexec",
-	"cme":               "crackmapexec",
+	"crackmapexec":      "netexec",
+	"cme":               "netexec",
+	"nxc":               "netexec",
 	"enum4linux":        "enum4linux",
 	"smbclient":         "samba-client",
 	"smbmap":            "smbmap",
@@ -588,6 +716,7 @@ var versionArgs = map[string][]string{
 	"responder":         {"--version"},
 	"impacket":          {"--version"},
 	"crackmapexec":      {"--version"},
+	"nxc":               {"--version"},
 	"enum4linux":        {"--version"},
 	"smbclient":         {"--version"},
 	"smbmap":            {"--version"},
@@ -680,36 +809,111 @@ func detectTool(tool ToolInfo, wg *sync.WaitGroup, results chan<- DetectionResul
 }
 
 func tryGetVersion(name string) string {
-	args, ok := versionArgs[name]
-	if !ok {
-		args = []string{"--version"}
-	}
-
 	toolPath, err := exec.LookPath(name)
 	if err != nil {
 		return ""
 	}
 
-	ctx := exec.Command(toolPath, args...)
-	ctx.Env = os.Environ()
-
-	out, err := ctx.CombinedOutput()
-	if err != nil {
-		return ""
+	versionFlags := [][]string{
+		{"--version"},
+		{"-version"},
+		{"-v"},
+		{"version"},
+		{"-V"},
 	}
 
-	version := strings.TrimSpace(string(out))
-	lines := strings.Split(version, "\n")
-	if len(lines) > 0 {
+	if specific, ok := versionArgs[name]; ok {
+		versionFlags = append([][]string{specific}, versionFlags...)
+	}
+
+	for _, args := range versionFlags {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		cmd := exec.CommandContext(ctx, toolPath, args...)
+		cmd.Env = os.Environ()
+
+		out, err := cmd.CombinedOutput()
+		cancel()
+
+		if err != nil {
+			continue
+		}
+
+		version := strings.TrimSpace(string(out))
+		if version == "" {
+			continue
+		}
+
+		lines := strings.Split(version, "\n")
 		version = lines[0]
+
+		version = strings.ReplaceAll(version, "\r", "")
+		version = strings.TrimSpace(version)
+
+		if strings.HasPrefix(version, "Usage:") || strings.HasPrefix(version, "usage:") {
+			continue
+		}
+
+		if len(version) > 80 {
+			version = version[:77] + "..."
+		}
+		return version
 	}
-	if len(version) > 80 {
-		version = version[:77] + "..."
+
+	return ""
+}
+
+type cachedData struct {
+	Timestamp time.Time         `json:"timestamp"`
+	Results   []DetectionResult `json:"results"`
+}
+
+func getCachePath() string {
+	return filepath.Join(os.TempDir(), "prowl-tools-cache.json")
+}
+
+func loadCache() ([]DetectionResult, bool) {
+	data, err := os.ReadFile(getCachePath())
+	if err != nil {
+		return nil, false
 	}
-	return version
+
+	var cached cachedData
+	if err := json.Unmarshal(data, &cached); err != nil {
+		return nil, false
+	}
+
+	if time.Since(cached.Timestamp) > time.Hour {
+		return nil, false
+	}
+
+	return cached.Results, true
+}
+
+func saveCache(results []DetectionResult) {
+	cached := cachedData{
+		Timestamp: time.Now(),
+		Results:   results,
+	}
+
+	data, err := json.Marshal(cached)
+	if err != nil {
+		return
+	}
+
+	tmpPath := getCachePath() + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
+		return
+	}
+	os.Rename(tmpPath, getCachePath())
 }
 
 func DetectAll() []DetectionResult {
+	osInfo := DetectOS()
+
+	if cached, ok := loadCache(); ok {
+		return cached
+	}
+
 	results := make([]DetectionResult, len(allTools))
 	ch := make(chan DetectionResult, len(allTools))
 	var wg sync.WaitGroup
@@ -737,7 +941,95 @@ func DetectAll() []DetectionResult {
 		return results[i].Tool.Name < results[j].Tool.Name
 	})
 
+	var missing []DetectionResult
+	for _, r := range results {
+		if !r.Found {
+			missing = append(missing, r)
+		}
+	}
+
+	if osInfo.IsNixOS && len(missing) > 0 && !skipInstall {
+		nixPackages := make(map[string]bool)
+		for _, tool := range missing {
+			if tool.Tool.PackageNix != "" {
+				nixPackages[tool.Tool.PackageNix] = true
+			}
+		}
+
+		if len(nixPackages) > 0 {
+			pkgs := make([]string, 0, len(nixPackages))
+			for pkg := range nixPackages {
+				pkgs = append(pkgs, pkg)
+			}
+			sort.Strings(pkgs)
+
+			fmt.Fprintf(os.Stderr, "\n\033[33m%d tools missing (%d nix packages):\033[0m\n", len(missing), len(pkgs))
+			for _, pkg := range pkgs {
+				fmt.Fprintf(os.Stderr, "  \033[90m- %s\033[0m\n", pkg)
+			}
+			fmt.Fprintf(os.Stderr, "\n\033[33mInstall via nix-shell? [y/N]: \033[0m")
+			var answer string
+			fmt.Scanln(&answer)
+			if strings.ToLower(strings.TrimSpace(answer)) == "y" {
+				installNixPackages(missing, osInfo)
+			}
+		}
+	} else if !osInfo.IsNixOS && len(missing) > 0 {
+		missingSet := make(map[string]bool)
+		for _, m := range missing {
+			missingSet[m.Tool.Name] = true
+		}
+		for i := range results {
+			if missingSet[results[i].Tool.Name] {
+				results[i].Found = false
+			}
+		}
+	}
+
+	saveCache(results)
+
 	return results
+}
+
+func installNixPackages(missing []DetectionResult, osInfo *OSInfo) {
+	nixPackages := make(map[string]bool)
+	for _, tool := range missing {
+		if tool.Tool.PackageNix != "" {
+			nixPackages[tool.Tool.PackageNix] = true
+		}
+	}
+
+	if len(nixPackages) == 0 {
+		fmt.Fprintf(os.Stderr, "\033[31mNo nix packages available for missing tools\033[0m\n")
+		return
+	}
+
+	pkgs := make([]string, 0, len(nixPackages))
+	for pkg := range nixPackages {
+		pkgs = append(pkgs, pkg)
+	}
+	sort.Strings(pkgs)
+
+	nixShell := fmt.Sprintf("nix-shell -p %s --run exit", strings.Join(pkgs, " "))
+	fmt.Fprintf(os.Stderr, "\n\033[36mInstalling %d packages via nix-shell...\033[0m\n", len(pkgs))
+	fmt.Fprintf(os.Stderr, "\033[90mCommand: %s\033[0m\n\n", nixShell)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	args := append([]string{"-p"}, pkgs...)
+	args = append(args, "--run", "exit")
+	cmd := exec.CommandContext(ctx, "nix-shell", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "\033[31mFailed to install packages: %v\033[0m\n", err)
+		fmt.Fprintf(os.Stderr, "\033[90mTry running manually: %s\033[0m\n", nixShell)
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "\n\033[32mPackages available in nix-shell\033[0m\n")
 }
 
 func DetectByCategory(cat Category) []DetectionResult {

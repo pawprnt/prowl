@@ -297,12 +297,23 @@ func APKDecompileFrida(ctx context.Context, pkgName string) (string, error) {
 		return "", fmt.Errorf("frida not found")
 	}
 
-	args := []string{"-U", "-l", "/dev/stdin", pkgName}
 	script := `Java.perform(function() {
 	console.log("Frida attached to " + pkgName);
 });`
 
-	_ = script
+	tmpFile, err := os.CreateTemp("", "frida-*.js")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(script); err != nil {
+		tmpFile.Close()
+		return "", fmt.Errorf("failed to write script: %w", err)
+	}
+	tmpFile.Close()
+
+	args := []string{"-U", "-l", tmpFile.Name(), pkgName}
 
 	output, err := runCommand(ctx, path, args...)
 	if err != nil {

@@ -289,7 +289,10 @@ func CheckGitHubOrg(ctx context.Context, org string) (GitHubOrgResult, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	apiURL := fmt.Sprintf("https://api.github.com/orgs/%s", org)
-	req, _ := http.NewRequest("GET", apiURL, nil)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return result, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := client.Do(req)
@@ -306,7 +309,10 @@ func CheckGitHubOrg(ctx context.Context, org string) (GitHubOrgResult, error) {
 	}
 
 	membersURL := fmt.Sprintf("https://api.github.com/orgs/%s/members?per_page=100", org)
-	req, _ = http.NewRequest("GET", membersURL, nil)
+	req, err = http.NewRequest("GET", membersURL, nil)
+	if err != nil {
+		return result, fmt.Errorf("failed to create members request: %w", err)
+	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err = client.Do(req)

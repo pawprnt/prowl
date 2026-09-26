@@ -4,18 +4,26 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pawprnt/prowl/internal/config"
 )
 
-var globalConfig *config.Config
+var (
+	globalConfig *config.Config
+	configMu     sync.RWMutex
+)
 
 func SetConfig(cfg *config.Config) {
+	configMu.Lock()
+	defer configMu.Unlock()
 	globalConfig = cfg
 }
 
 func GetConfig() *config.Config {
+	configMu.RLock()
+	defer configMu.RUnlock()
 	return globalConfig
 }
 
@@ -51,11 +59,15 @@ func NewClient(timeout int) *http.Client {
 		Timeout: time.Duration(timeout) * time.Second,
 	}
 
-	if globalConfig != nil {
+	configMu.RLock()
+	cfg := globalConfig
+	configMu.RUnlock()
+
+	if cfg != nil {
 		transport := http.DefaultTransport
 
-		if globalConfig.ProxyEnabled && globalConfig.ProxyAddr != "" {
-			proxyURL, err := parseProxyURL(globalConfig.ProxyAddr)
+		if cfg.ProxyEnabled && cfg.ProxyAddr != "" {
+			proxyURL, err := parseProxyURL(cfg.ProxyAddr)
 			if err == nil {
 				transport = &http.Transport{
 					Proxy: http.ProxyURL(proxyURL),
@@ -65,10 +77,10 @@ func NewClient(timeout int) *http.Client {
 
 		client.Transport = &configTransport{
 			base: transport,
-			cfg:  globalConfig,
+			cfg:  cfg,
 		}
 
-		if !globalConfig.FollowRedirects {
+		if !cfg.FollowRedirects {
 			client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			}

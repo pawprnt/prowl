@@ -127,7 +127,7 @@ func TestSecretPatterns(t *testing.T) {
 }
 
 func TestHeaderAudit(t *testing.T) {
-	result, err := scanner.AuditSecurityHeaders("https://httpbin.org")
+	result, err := scanner.AuditSecurityHeaders(context.Background(), "https://httpbin.org")
 	if err != nil {
 		t.Logf("AuditSecurityHeaders returned error (may be expected if offline): %v", err)
 		return
@@ -154,7 +154,7 @@ func TestHeaderAudit(t *testing.T) {
 }
 
 func TestCORSDetection(t *testing.T) {
-	result, err := scanner.AuditCORS("https://httpbin.org")
+	result, err := scanner.AuditCORS(context.Background(), "https://httpbin.org")
 	if err != nil {
 		t.Logf("AuditCORS returned error (may be expected if offline): %v", err)
 		return

@@ -373,6 +373,8 @@ func ESLintSecurity(ctx context.Context, target string) (*SASTResult, error) {
 		for _, msg := range f.Messages {
 			sev := "info"
 			if msg.Severity == 2 {
+				sev = "error"
+			} else if msg.Severity == 1 {
 				sev = "warning"
 			}
 			finding := SASTFinding{

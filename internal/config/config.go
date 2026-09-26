@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -203,10 +204,14 @@ func projectConfigPath() string {
 
 func envOverrides(cfg *Config) {
 	if v := os.Getenv("PROWL_THREADS"); v != "" {
-		fmt.Sscanf(v, "%d", &cfg.Threads)
+		if _, err := fmt.Sscanf(v, "%d", &cfg.Threads); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid PROWL_THREADS value: %v\n", err)
+		}
 	}
 	if v := os.Getenv("PROWL_TIMEOUT"); v != "" {
-		fmt.Sscanf(v, "%d", &cfg.Timeout)
+		if _, err := fmt.Sscanf(v, "%d", &cfg.Timeout); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid PROWL_TIMEOUT value: %v\n", err)
+		}
 	}
 	if v := os.Getenv("PROWL_OUTPUT_DIR"); v != "" {
 		cfg.OutputDir = v
@@ -220,8 +225,11 @@ func envOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("PROWL_VERBOSITY"); v != "" {
 		var verb int
-		fmt.Sscanf(v, "%d", &verb)
-		cfg.Verbosity = Verbosity(verb)
+		if _, err := fmt.Sscanf(v, "%d", &verb); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid PROWL_VERBOSITY value: %v\n", err)
+		} else {
+			cfg.Verbosity = Verbosity(verb)
+		}
 	}
 	if v := os.Getenv("PROWL_NO_COLOR"); v == "1" || v == "true" {
 		enabled := false
@@ -243,7 +251,9 @@ func envOverrides(cfg *Config) {
 		cfg.AIModel = v
 	}
 	if v := os.Getenv("PROWL_AI_TIMEOUT"); v != "" {
-		fmt.Sscanf(v, "%d", &cfg.AITimeout)
+		if _, err := fmt.Sscanf(v, "%d", &cfg.AITimeout); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid PROWL_AI_TIMEOUT value: %v\n", err)
+		}
 	}
 	if v := os.Getenv("PROWL_STEALTH"); v == "1" || v == "true" {
 		cfg.StealthMode = true
@@ -315,78 +325,57 @@ func LoadWithProject() (*Config, error) {
 }
 
 func mergeConfigs(base, override *Config) {
-	if override.Threads > 0 {
-		base.Threads = override.Threads
+	data, err := yaml.Marshal(override)
+	if err != nil {
+		return
 	}
-	if override.Timeout > 0 {
-		base.Timeout = override.Timeout
+
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return
 	}
-	if override.OutputDir != "" {
-		base.OutputDir = override.OutputDir
-	}
-	if override.ProxyAddr != "" {
-		base.ProxyAddr = override.ProxyAddr
-		base.ProxyEnabled = true
-	}
-	if override.Severity != "" {
-		base.Severity = override.Severity
-	}
-	if override.DefaultProfile != "" {
-		base.DefaultProfile = override.DefaultProfile
-	}
-	if override.DefaultFormat != "" {
-		base.DefaultFormat = override.DefaultFormat
-	}
-	if override.UserAgent != "" {
-		base.UserAgent = override.UserAgent
-	}
-	if override.MaxRetries > 0 {
-		base.MaxRetries = override.MaxRetries
-	}
-	if override.RateLimit > 0 {
-		base.RateLimit = override.RateLimit
-	}
-	if override.Delay > 0 {
-		base.Delay = override.Delay
-	}
-	for k, v := range override.ToolPaths {
-		if base.ToolPaths == nil {
-			base.ToolPaths = make(map[string]string)
+
+	baseVal := reflect.ValueOf(base).Elem()
+	baseType := baseVal.Type()
+
+	for i := 0; i < baseVal.NumField(); i++ {
+		field := baseType.Field(i)
+		yamlKey := field.Tag.Get("yaml")
+		if yamlKey == "" || yamlKey == "-" {
+			continue
 		}
-		base.ToolPaths[k] = v
-	}
-	for k, v := range override.CustomHeaders {
-		if base.CustomHeaders == nil {
-			base.CustomHeaders = make(map[string]string)
+
+		_, exists := raw[yamlKey]
+		if !exists {
+			continue
 		}
-		base.CustomHeaders[k] = v
+
+		baseField := baseVal.Field(i)
+		overrideField := reflect.ValueOf(override).Elem().Field(i)
+
+		switch baseField.Kind() {
+		case reflect.Ptr:
+			if !overrideField.IsNil() {
+				baseField.Set(overrideField)
+			}
+		case reflect.String:
+			baseField.SetString(overrideField.String())
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			baseField.SetInt(overrideField.Int())
+		case reflect.Bool:
+			baseField.SetBool(overrideField.Bool())
+		case reflect.Slice:
+			baseField.Set(overrideField)
+		case reflect.Map:
+			if baseField.IsNil() {
+				baseField.Set(reflect.MakeMap(baseField.Type()))
+			}
+			iter := overrideField.MapRange()
+			for iter.Next() {
+				baseField.SetMapIndex(iter.Key(), iter.Value())
+			}
+		}
 	}
-	if len(override.DefaultTargets) > 0 {
-		base.DefaultTargets = override.DefaultTargets
-	}
-	if len(override.ExcludedDomains) > 0 {
-		base.ExcludedDomains = override.ExcludedDomains
-	}
-	if len(override.ScanTypes) > 0 {
-		base.ScanTypes = override.ScanTypes
-	}
-	if override.ColorEnabled != nil {
-		base.ColorEnabled = override.ColorEnabled
-	}
-	if override.AIModel != "" {
-		base.AIModel = override.AIModel
-	}
-	if override.AITimeout > 0 {
-		base.AITimeout = override.AITimeout
-	}
-	base.AIFallback = override.AIFallback
-	base.StealthMode = override.StealthMode
-	base.VerboseOutput = override.VerboseOutput
-	base.ConfirmActions = override.ConfirmActions
-	if override.MaxFindings > 0 {
-		base.MaxFindings = override.MaxFindings
-	}
-	base.AutoUpdate = override.AutoUpdate
 }
 
 func Save(cfg *Config) error {
@@ -528,6 +517,9 @@ func Validate(cfg *Config) error {
 }
 
 func (c *Config) Get(key string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
 	switch key {
 	case "version":
 		return fmt.Sprintf("%d", c.Version), true

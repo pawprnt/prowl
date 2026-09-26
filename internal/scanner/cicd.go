@@ -527,11 +527,13 @@ func CheckSecretExposure(ctx context.Context, repoURL string) (*SecretExposureRe
 	if err == nil {
 		resp, err := client.Do(req)
 		if err == nil {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
 			resp.Body.Close()
+
+			_ = secretPatterns
+			_ = body
 		}
 	}
-
-	_ = secretPatterns
 
 	printProgress("Secrets: found %d potential secrets", len(result.Secrets))
 	return result, nil
@@ -568,7 +570,7 @@ func convertToRawGitHub(repoURL, path string) string {
 	if !strings.HasSuffix(rawURL, "/") {
 		rawURL += "/"
 	}
-	rawURL += "master/" + path
+	rawURL += "main/" + path
 	return rawURL
 }
 

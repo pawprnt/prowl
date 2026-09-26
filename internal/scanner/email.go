@@ -246,7 +246,9 @@ func CheckOpenRelay(ctx context.Context, host string) (*RelayResult, error) {
 
 	reader := bufio.NewReader(conn)
 	resp, _ := reader.ReadString('\n')
-	_ = resp
+	if !strings.HasPrefix(resp, "220") {
+		return result, fmt.Errorf("invalid SMTP banner: %s", strings.TrimSpace(resp))
+	}
 
 	_, err = fmt.Fprintf(conn, "EHLO test.example.com\r\n")
 	if err != nil {

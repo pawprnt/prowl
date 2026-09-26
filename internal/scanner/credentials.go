@@ -186,7 +186,9 @@ func DefaultCreds(ctx context.Context, target string) (*DefaultCredsResult, erro
 		}
 
 		url := webURL + "/login"
-		resp, err := client.Get(url)
+
+		loginData := fmt.Sprintf("username=%s&password=%s", cred.user, cred.pass)
+		resp, err := client.Post(url, "application/x-www-form-urlencoded", strings.NewReader(loginData))
 		if err != nil {
 			continue
 		}
@@ -331,12 +333,6 @@ func CredentialSpray(ctx context.Context, usernames, passwords []string, target 
 	}
 
 	for _, svc := range services {
-		conn, err := net.DialTimeout("tcp", target+":"+svc.port, 3*time.Second)
-		if err != nil {
-			continue
-		}
-		conn.Close()
-
 		for _, pass := range passwords {
 			for _, user := range usernames {
 				select {
@@ -351,13 +347,60 @@ func CredentialSpray(ctx context.Context, usernames, passwords []string, target 
 				if err != nil {
 					continue
 				}
+
+				authenticated := false
+				buf := make([]byte, 1024)
+
+				switch svc.name {
+				case "ssh":
+					conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+					n, err := conn.Read(buf)
+					if err == nil && n > 0 {
+						banner := string(buf[:n])
+						if strings.HasPrefix(banner, "SSH-") {
+							authenticated = true
+						}
+					}
+				case "ftp":
+					conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+					n, err := conn.Read(buf)
+					if err == nil && n > 0 {
+						banner := string(buf[:n])
+						if strings.HasPrefix(banner, "220") {
+							fmt.Fprintf(conn, "USER %s\r\n", user)
+							conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+							n, err = conn.Read(buf)
+							if err == nil {
+								resp := string(buf[:n])
+								if strings.HasPrefix(resp, "331") {
+									fmt.Fprintf(conn, "PASS %s\r\n", pass)
+									conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+									n, err = conn.Read(buf)
+									if err == nil {
+										resp = string(buf[:n])
+										if strings.HasPrefix(resp, "230") {
+											authenticated = true
+										}
+									}
+								}
+							}
+						}
+					}
+				case "mysql":
+					_ = buf
+				case "smb", "rdp", "mssql", "postgres":
+					authenticated = false
+				}
+
 				conn.Close()
 
-				result.Hits = append(result.Hits, SprayHit{
-					Username: user,
-					Password: pass,
-					Service:  svc.name,
-				})
+				if authenticated {
+					result.Hits = append(result.Hits, SprayHit{
+						Username: user,
+						Password: pass,
+						Service:  svc.name,
+					})
+				}
 			}
 		}
 	}

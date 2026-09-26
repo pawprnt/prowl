@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -161,7 +162,7 @@ type AuditSummary struct {
 	FHeaders        int `json:"f_headers"`
 }
 
-func AuditSecurityHeaders(target string) (SecurityAuditResult, error) {
+func AuditSecurityHeaders(ctx context.Context, target string) (SecurityAuditResult, error) {
 	printProgress("Auditing security headers on %s", target)
 	result := SecurityAuditResult{
 		Target:    target,
@@ -184,7 +185,11 @@ func AuditSecurityHeaders(target string) (SecurityAuditResult, error) {
 		},
 	}
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return result, fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return result, fmt.Errorf("failed to fetch %s: %w", url, err)
 	}

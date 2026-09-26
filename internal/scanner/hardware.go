@@ -157,11 +157,18 @@ func CheckIntelME(ctx context.Context, target string) (IntelMEResult, error) {
 	}
 
 	for _, v := range knownVulns {
-		result.CVEs = append(result.CVEs, v.cve)
-		result.Vulnerable = true
+		for _, affected := range v.affected {
+			if strings.Contains(result.Version, affected) {
+				result.CVEs = append(result.CVEs, v.cve)
+				result.Vulnerable = true
+				break
+			}
+		}
 	}
 
-	result.Remediation = "Update Intel ME firmware to the latest version from the system vendor"
+	if result.Vulnerable {
+		result.Remediation = "Update Intel ME firmware to the latest version from the system vendor"
+	}
 
 	printProgress("Intel ME check: vulnerable=%v, CVEs=%d", result.Vulnerable, len(result.CVEs))
 	return result, nil
@@ -180,9 +187,20 @@ func CheckAMDVuln(ctx context.Context, target string) (AMDVulnResult, error) {
 		"CVE-2023-20566",
 	}
 
-	result.CVEs = knownVulns
-	result.Vulnerable = len(knownVulns) > 0
-	result.Remediation = "Update AMD AGESA firmware to the latest version from the system vendor"
+	if runtime.GOOS == "linux" {
+		if data, err := os.ReadFile("/sys/class/dmi/id/bios_vendor"); err == nil {
+			vendor := strings.TrimSpace(string(data))
+			if strings.Contains(strings.ToLower(vendor), "amd") {
+				result.CVEs = knownVulns
+				result.Vulnerable = true
+				result.Remediation = "Update AMD AGESA firmware to the latest version from the system vendor"
+			}
+		}
+	}
+
+	if !result.Vulnerable {
+		result.Remediation = "Manual check required: could not determine AMD firmware version"
+	}
 
 	printProgress("AMD firmware check: vulnerable=%v, CVEs=%d", result.Vulnerable, len(result.CVEs))
 	return result, nil
@@ -458,9 +476,13 @@ func parseLSUSB(line string) USBDevice {
 	device := USBDevice{}
 	parts := strings.Split(line, " ")
 	if len(parts) >= 6 {
-		device.VendorID = strings.TrimPrefix(parts[5], "ID ")
-		if len(parts) >= 7 {
-			device.ProductID = parts[6]
+		idField := strings.TrimPrefix(parts[5], "ID ")
+		idParts := strings.SplitN(idField, ":", 2)
+		if len(idParts) == 2 {
+			device.VendorID = idParts[0]
+			device.ProductID = idParts[1]
+		} else if len(idParts) == 1 {
+			device.VendorID = idParts[0]
 		}
 	}
 	if idx := strings.LastIndex(line, "\""); idx > 0 {

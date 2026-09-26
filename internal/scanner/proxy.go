@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -54,8 +55,8 @@ func MitmproxyStart(ctx context.Context, port int, outputFile string) (MitmResul
 		args = append(args, "-w", outputFile)
 	}
 
-	_, err := runCommand(ctx, path, args...)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, path, args...)
+	if err := cmd.Start(); err != nil {
 		return result, err
 	}
 
@@ -105,8 +106,8 @@ func MitmproxyInterceptRules(ctx context.Context, port int, rules []string) (Mit
 		args = append(args, "--set", "intercept="+rule)
 	}
 
-	_, err := runCommand(ctx, path, args...)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, path, args...)
+	if err := cmd.Start(); err != nil {
 		return result, err
 	}
 
@@ -119,7 +120,10 @@ func ProxychainsRun(ctx context.Context, proxy, command string) (string, error) 
 
 	path, ok := findTool("proxychains")
 	if !ok {
-		return "", fmt.Errorf("proxychains not found")
+		path, ok = findTool("proxychains-ng")
+	}
+	if !ok {
+		return "", fmt.Errorf("no proxychains found (proxychains/proxychains-ng)")
 	}
 
 	args := []string{"-q"}
@@ -143,7 +147,10 @@ func ProxychainsTor(ctx context.Context, command string) (string, error) {
 
 	path, ok := findTool("proxychains")
 	if !ok {
-		return "", fmt.Errorf("proxychains not found")
+		path, ok = findTool("proxychains-ng")
+	}
+	if !ok {
+		return "", fmt.Errorf("no proxychains found (proxychains/proxychains-ng)")
 	}
 
 	torConf := "strict_chain\nproxy_dns\ntcp_read_time_out 15000\ntcp_connect_time_out 8000\n[ProxyList]\ntor 127.0.0.1 9050"
@@ -173,12 +180,12 @@ func BettercapStart(ctx context.Context, iface string) (string, error) {
 	}
 
 	args := []string{"-iface", iface, "-caplet", "http.proxy"}
-	output, err := runCommand(ctx, path, args...)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, path, args...)
+	if err := cmd.Start(); err != nil {
 		return "", err
 	}
 
-	return string(output), nil
+	return "", nil
 }
 
 func BettercapARP(ctx context.Context, iface, target, gateway string) (string, error) {
@@ -191,12 +198,12 @@ func BettercapARP(ctx context.Context, iface, target, gateway string) (string, e
 	script := fmt.Sprintf("set arp.spoof.targets %s; arp.spoof on; net.sniff on", target)
 	args := []string{"-iface", iface, "-eval", script}
 
-	output, err := runCommand(ctx, path, args...)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, path, args...)
+	if err := cmd.Start(); err != nil {
 		return "", err
 	}
 
-	return string(output), nil
+	return "", nil
 }
 
 func BettercapDNS(ctx context.Context, iface, target, redirect string) (string, error) {
@@ -209,12 +216,12 @@ func BettercapDNS(ctx context.Context, iface, target, redirect string) (string, 
 	script := fmt.Sprintf("set dns.spoof.domains %s; set dns.spoof.address %s; dns.spoof on", target, redirect)
 	args := []string{"-iface", iface, "-eval", script}
 
-	output, err := runCommand(ctx, path, args...)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, path, args...)
+	if err := cmd.Start(); err != nil {
 		return "", err
 	}
 
-	return string(output), nil
+	return "", nil
 }
 
 func EttercapStart(ctx context.Context, iface string) (string, error) {
@@ -225,12 +232,12 @@ func EttercapStart(ctx context.Context, iface string) (string, error) {
 	}
 
 	args := []string{"-i", iface, "-T", "-q"}
-	output, err := runCommand(ctx, path, args...)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, path, args...)
+	if err := cmd.Start(); err != nil {
 		return "", err
 	}
 
-	return string(output), nil
+	return "", nil
 }
 
 func EttercapARP(ctx context.Context, iface, target, gateway string) (string, error) {
@@ -246,16 +253,15 @@ func EttercapARP(ctx context.Context, iface, target, gateway string) (string, er
 		"-M", "arp",
 		"--remote",
 		target,
-		"",
 		gateway,
 	}
 
-	output, err := runCommand(ctx, path, args...)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, path, args...)
+	if err := cmd.Start(); err != nil {
 		return "", err
 	}
 
-	return string(output), nil
+	return "", nil
 }
 
 func Sslstrip(ctx context.Context, iface string) (string, error) {
@@ -269,12 +275,12 @@ func Sslstrip(ctx context.Context, iface string) (string, error) {
 	}
 
 	args := []string{"-i", iface, "-w", "/tmp/sslstrip.log"}
-	output, err := runCommand(ctx, path, args...)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, path, args...)
+	if err := cmd.Start(); err != nil {
 		return "", err
 	}
 
-	return string(output), nil
+	return "", nil
 }
 
 func TcpdumpCapture(ctx context.Context, iface, filter, outputFile string, duration int) (CaptureResult, error) {
@@ -298,12 +304,11 @@ func TcpdumpCapture(ctx context.Context, iface, filter, outputFile string, durat
 		args = append(args, "-G", fmt.Sprintf("%d", duration), "-W", "1")
 	}
 
-	output, err := runCommand(ctx, path, args...)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, path, args...)
+	if err := cmd.Start(); err != nil {
 		return result, err
 	}
 
-	_ = output
 	printProgress("Capture saved to %s", outputFile)
 	return result, nil
 }

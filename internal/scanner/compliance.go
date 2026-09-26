@@ -376,8 +376,12 @@ func nmapScriptScan(ctx context.Context, target, port, script string) (string, e
 }
 
 func sslyzeScan(ctx context.Context, target string) (string, error) {
-	out, err := runCommand(ctx, "sslyze")
-	return string(out), err
+	// sslyze not available on NixOS, use sslscan as fallback
+	if path, ok := findTool("sslscan"); ok {
+		out, err := runCommand(ctx, path, target)
+		return string(out), err
+	}
+	return "", fmt.Errorf("no SSL scanner found (sslyze/sslscan)")
 }
 
 func fileExists(path string) bool {
@@ -400,19 +404,15 @@ func cisCheckSSHKeyAuth(ctx context.Context, target string) (bool, string) {
 }
 
 func cisCheckSSHRootDisabled(ctx context.Context, target string) (bool, string) {
-	_, err := nmapScriptScan(ctx, target, "22", "ssh2-enum-algos")
-	if err != nil {
-		return false, fmt.Sprintf("scan error: %v", err)
-	}
-	return true, "requires direct SSH config access to verify"
+	return true, "requires manual verification - nmap cannot check sshd_config for PermitRootLogin"
 }
 
 func cisCheckFirewall(ctx context.Context, target string) (bool, string) {
-	s, err := nmapScan(ctx, target, "", "--top-ports", "20", "-oX", "-")
+	s, err := nmapScan(ctx, target, "", "--top-ports", "20")
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	count := strings.Count(s, "<port ")
+	count := strings.Count(s, "/tcp open")
 	if count <= 10 {
 		return true, fmt.Sprintf("only %d open ports detected", count)
 	}
@@ -426,7 +426,7 @@ func cisCheckUnnecessaryPorts(ctx context.Context, target string) (bool, string)
 	}
 	var openPorts []string
 	for _, port := range []string{"21/tcp", "23/tcp", "25/tcp", "110/tcp", "143/tcp", "445/tcp", "3389/tcp"} {
-		if strings.Contains(s, port) && strings.Contains(s, "open") {
+		if strings.Contains(s, port+" open") {
 			openPorts = append(openPorts, port)
 		}
 	}
@@ -441,7 +441,7 @@ func cisCheckAuditLogging(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "open") {
+	if strings.Contains(s, "tcp open") {
 		return true, "syslog port accessible"
 	}
 	return false, "syslog not detected on standard port"
@@ -488,11 +488,11 @@ func cisCheckUnnecessaryPackages(ctx context.Context, target string) (bool, stri
 }
 
 func pciCheckFirewall(ctx context.Context, target string) (bool, string) {
-	s, err := nmapScan(ctx, target, "", "--top-ports", "100", "-oX", "-")
+	s, err := nmapScan(ctx, target, "", "--top-ports", "100")
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	count := strings.Count(s, "<port ")
+	count := strings.Count(s, "/tcp open")
 	if count <= 5 {
 		return true, fmt.Sprintf("minimal attack surface: %d open ports", count)
 	}
@@ -545,7 +545,7 @@ func pciCheckAuditTrails(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "open") {
+	if strings.Contains(s, "tcp open") {
 		return true, "logging service detected"
 	}
 	return false, "no centralized logging service detected"
@@ -566,7 +566,7 @@ func hipaaCheckEncryption(ctx context.Context, target string) (bool, string) {
 	}
 	dbPorts := []string{"5432", "3306", "1433", "27017"}
 	for _, p := range dbPorts {
-		if strings.Contains(s, p+"/tcp") && strings.Contains(s, "open") {
+		if strings.Contains(s, p+"/tcp open") {
 			if strings.Contains(s, "TLSv1.0") || strings.Contains(s, "SSLv3") {
 				return false, fmt.Sprintf("port %s: weak encryption", p)
 			}
@@ -580,7 +580,7 @@ func hipaaCheckAccess(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "389/tcp") && strings.Contains(s, "open") {
+	if strings.Contains(s, "389/tcp open") {
 		return false, "LDAP accessible - verify SSL/TLS is enforced"
 	}
 	return true, "directory service access configuration acceptable"
@@ -591,7 +591,7 @@ func hipaaCheckAudit(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "open") {
+	if strings.Contains(s, "tcp open") {
 		return true, "logging infrastructure detected"
 	}
 	return false, "no centralized logging infrastructure detected"
@@ -641,7 +641,7 @@ func soc2CheckMonitoring(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "open") {
+	if strings.Contains(s, "tcp open") {
 		return true, "monitoring infrastructure detected"
 	}
 	return false, "no monitoring infrastructure detected on common ports"
@@ -656,10 +656,10 @@ func soc2CheckLogicalAccess(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "3389/tcp") && strings.Contains(s, "open") {
+	if strings.Contains(s, "3389/tcp") && strings.Contains(s, "tcp open") {
 		return false, "RDP exposed - verify logical access controls"
 	}
-	if strings.Contains(s, "5900/tcp") && strings.Contains(s, "open") {
+	if strings.Contains(s, "5900/tcp") && strings.Contains(s, "tcp open") {
 		return false, "VNC exposed - verify logical access controls"
 	}
 	return true, "remote access ports configured appropriately"
@@ -694,7 +694,7 @@ func isoCheckAssetInventory(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	count := strings.Count(s, "<port ")
+	count := strings.Count(s, "/tcp open")
 	return count > 0, fmt.Sprintf("discovered %d assets from network scan", count)
 }
 
@@ -726,7 +726,7 @@ func isoCheckNetworkSecurity(ctx context.Context, target string) (bool, string) 
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	count := strings.Count(s, "<port ")
+	count := strings.Count(s, "/tcp open")
 	if count <= 15 {
 		return true, fmt.Sprintf("network shows %d open ports - acceptable", count)
 	}
@@ -758,7 +758,7 @@ func nistCheckAccountMgmt(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "open") && strings.Contains(s, "bind") {
+	if strings.Contains(s, "tcp open") && strings.Contains(s, "bind") {
 		return false, "LDAP accessible - verify account management controls"
 	}
 	return true, "no unmanaged directory services detected"
@@ -777,7 +777,7 @@ func nistCheckAuditEvents(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "open") {
+	if strings.Contains(s, "tcp open") {
 		return true, "audit event collection infrastructure detected"
 	}
 	return false, "no audit event collection infrastructure detected"
@@ -796,7 +796,7 @@ func nistCheckContinuousMonitoring(ctx context.Context, target string) (bool, st
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "open") {
+	if strings.Contains(s, "tcp open") {
 		return true, "web management interfaces detected - monitoring may be available"
 	}
 	return true, "continuous monitoring requires process review"
@@ -838,7 +838,7 @@ func nistCheckVulnMonitoring(ctx context.Context, target string) (bool, string) 
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	count := strings.Count(s, "<port ")
+	count := strings.Count(s, "/tcp open")
 	return count > 0, fmt.Sprintf("vulnerability scan completed - %d ports assessed", count)
 }
 
@@ -847,7 +847,7 @@ func nistCheckBoundary(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	count := strings.Count(s, "<port ")
+	count := strings.Count(s, "/tcp open")
 	if count <= 20 {
 		return true, fmt.Sprintf("boundary appears restricted: %d open ports", count)
 	}
@@ -874,7 +874,7 @@ func nistCheckSystemMonitoring(ctx context.Context, target string) (bool, string
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "open") {
+	if strings.Contains(s, "tcp open") {
 		return true, "SNMP monitoring detected"
 	}
 	return true, "system monitoring requires process review"
@@ -896,7 +896,7 @@ func gdprCheckPrivacyNotice(ctx context.Context, target string) (bool, string) {
 	if !strings.Contains(target, "http") {
 		return true, "privacy notice requires manual URL verification"
 	}
-	out, err := runCommand(ctx, "curl")
+	out, err := runCommand(ctx, "curl", "-sL", target)
 	if err != nil {
 		return false, fmt.Sprintf("fetch error: %v", err)
 	}
@@ -935,7 +935,7 @@ func gdprCheckSecurity(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	count := strings.Count(s, "<port ")
+	count := strings.Count(s, "/tcp open")
 	if count <= 10 {
 		return true, fmt.Sprintf("security of processing: %d open ports - acceptable", count)
 	}
@@ -982,7 +982,7 @@ func ccpaCheckDoNotSellLink(ctx context.Context, target string) (bool, string) {
 	if !strings.Contains(target, "http") {
 		return true, "Do Not Sell link requires manual URL verification"
 	}
-	out, err := runCommand(ctx, "curl")
+	out, err := runCommand(ctx, "curl", "-sL", target)
 	if err != nil {
 		return false, fmt.Sprintf("fetch error: %v", err)
 	}
@@ -998,7 +998,7 @@ func owaspCheckAccessControl(ctx context.Context, target string) (bool, string) 
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	count := strings.Count(s, "<port ")
+	count := strings.Count(s, "/tcp open")
 	if count <= 10 {
 		return true, fmt.Sprintf("limited attack surface: %d open ports", count)
 	}
@@ -1072,7 +1072,7 @@ func owaspCheckLogging(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	if strings.Contains(s, "open") {
+	if strings.Contains(s, "tcp open") {
 		return true, "logging infrastructure detected"
 	}
 	return false, "no logging infrastructure detected"
@@ -1140,7 +1140,7 @@ func asvsCheckCommunications(ctx context.Context, target string) (bool, string) 
 }
 
 func asvsCheckHTTPHeaders(ctx context.Context, target string) (bool, string) {
-	out, err := runCommand(ctx, "curl")
+	out, err := runCommand(ctx, "curl", "-sL", target)
 	if err != nil {
 		return false, fmt.Sprintf("header check error: %v", err)
 	}
@@ -1207,7 +1207,7 @@ func wascCheckDoS(ctx context.Context, target string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("scan error: %v", err)
 	}
-	count := strings.Count(s, "<port ")
+	count := strings.Count(s, "/tcp open")
 	if count <= 20 {
 		return true, fmt.Sprintf("limited DoS surface: %d open ports", count)
 	}

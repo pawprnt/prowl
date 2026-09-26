@@ -7,8 +7,17 @@ import (
 	"math/rand"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
+
+var randMu sync.Mutex
+
+func randIntn(n int) int {
+	randMu.Lock()
+	defer randMu.Unlock()
+	return rand.Intn(n)
+}
 
 func StealthNmap(target, ports string) (string, error) {
 	args := []string{"-sS", "-T2", "-f", "--randomize-hosts"}
@@ -50,13 +59,13 @@ func StealthHTTP(target string) (string, error) {
 		RandomDelay(3*time.Second, 10*time.Second)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
 		cmd := exec.CommandContext(ctx, "curl", "-sI", "-A", agent, "-L", url)
 		var stdout bytes.Buffer
 		cmd.Stdout = &stdout
 		if err := cmd.Run(); err == nil {
 			results = append(results, stdout.String())
 		}
-		cancel()
 	}
 
 	return strings.Join(results, "\n---\n"), nil
@@ -82,6 +91,7 @@ func StealthDNS(domain string) (string, error) {
 		RandomDelay(1*time.Second, 5*time.Second)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+		defer cancel()
 		args := strings.Fields(q.flag)
 		args = append(args, "+short", domain)
 		cmd := exec.CommandContext(ctx, "dig", args...)
@@ -93,12 +103,12 @@ func StealthDNS(domain string) (string, error) {
 				results = append(results, fmt.Sprintf("# %s\n%s", q.desc, output))
 			}
 		}
-		cancel()
 	}
 
 	RandomDelay(2*time.Second, 6*time.Second)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, "dig", "+trace", "+short", domain)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
@@ -108,7 +118,6 @@ func StealthDNS(domain string) (string, error) {
 			results = append(results, fmt.Sprintf("# Trace\n%s", output))
 		}
 	}
-	cancel()
 
 	return strings.Join(results, "\n\n"), nil
 }
@@ -118,7 +127,9 @@ func RandomDelay(min, max time.Duration) {
 		time.Sleep(min)
 		return
 	}
+	randMu.Lock()
 	delay := min + time.Duration(rand.Int63n(int64(max-min)))
+	randMu.Unlock()
 	time.Sleep(delay)
 }
 
@@ -157,17 +168,21 @@ func RotateUserAgent() string {
 		"Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
 	}
-	return agents[rand.Intn(len(agents))]
+	return agents[randIntn(len(agents))]
 }
 
 func RotateProxy(proxies []string) string {
 	if len(proxies) == 0 {
 		return ""
 	}
-	return proxies[rand.Intn(len(proxies))]
+	return proxies[randIntn(len(proxies))]
 }
 
 func SlowBrute(host, port, service, userlist, passlist string, delay time.Duration) (string, error) {
+	if strings.HasPrefix(host, "-") || strings.HasPrefix(port, "-") || strings.HasPrefix(service, "-") {
+		return "", fmt.Errorf("invalid argument: host, port, and service must not start with '-'")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 	defer cancel()
 

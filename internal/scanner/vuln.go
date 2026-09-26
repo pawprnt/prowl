@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -263,7 +264,10 @@ func SSLAudit(ctx context.Context, target string) (SSLResult, error) {
 	result := SSLResult{Target: target}
 
 	if sslscanPath, ok := findTool("sslscan"); ok {
-		output, _ := runCommand(ctx, sslscanPath, target)
+		output, err := runCommand(ctx, sslscanPath, target)
+		if err != nil {
+			return result, fmt.Errorf("sslscan: %w", err)
+		}
 		lines := strings.Split(string(output), "\n")
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
@@ -277,7 +281,10 @@ func SSLAudit(ctx context.Context, target string) (SSLResult, error) {
 	}
 
 	if testsslPath, ok := findTool("testssl"); ok {
-		output, _ := runCommand(ctx, testsslPath, "--jsonfile", "/dev/stdout", target)
+		output, err := runCommand(ctx, testsslPath, "--jsonfile", "/dev/stdout", target)
+		if err != nil {
+			return result, fmt.Errorf("testssl: %w", err)
+		}
 		scanner := bufio.NewScanner(bytes.NewReader(output))
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
@@ -316,7 +323,10 @@ func SecretScan(ctx context.Context, repoPath string) ([]SecretFinding, error) {
 	var findings []SecretFinding
 
 	if trufflehogPath, ok := findTool("trufflehog"); ok {
-		output, _ := runCommand(ctx, trufflehogPath, "filesystem", "--directory", repoPath, "--json")
+		output, err := runCommand(ctx, trufflehogPath, "filesystem", "--directory", repoPath, "--json")
+		if err != nil {
+			return findings, fmt.Errorf("trufflehog: %w", err)
+		}
 		scanner := bufio.NewScanner(bytes.NewReader(output))
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
@@ -490,7 +500,11 @@ func HeaderAudit(ctx context.Context, target string) (HeaderResult, error) {
 		url = "https://" + url
 	}
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return result, fmt.Errorf("failed to create request for %s: %w", url, err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return result, fmt.Errorf("failed to fetch %s: %w", url, err)
 	}
@@ -853,9 +867,7 @@ func IDORTest(ctx context.Context, target string) ([]VulnFinding, error) {
 		if err != nil {
 			continue
 		}
-		originalBody := make([]byte, 1024)
-		n, _ := originalResp.Body.Read(originalBody)
-		originalBody = originalBody[:n]
+		originalBody, _ := io.ReadAll(originalResp.Body)
 		originalResp.Body.Close()
 
 		modifiedURL := strings.Replace(url, p.original, p.modified, 1)
@@ -863,9 +875,7 @@ func IDORTest(ctx context.Context, target string) ([]VulnFinding, error) {
 		if err != nil {
 			continue
 		}
-		modifiedBody := make([]byte, 1024)
-		n, _ = modifiedResp.Body.Read(modifiedBody)
-		modifiedBody = modifiedBody[:n]
+		modifiedBody, _ := io.ReadAll(modifiedResp.Body)
 		modifiedResp.Body.Close()
 
 		if originalResp.StatusCode == 200 && modifiedResp.StatusCode == 200 {

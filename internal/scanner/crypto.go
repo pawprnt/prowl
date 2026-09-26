@@ -177,7 +177,7 @@ func CheckTLS(ctx context.Context, host string, port int) (*TLSResult, error) {
 
 	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", addr, config)
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 	defer conn.Close()
 
@@ -208,7 +208,7 @@ func CheckCertificateChain(ctx context.Context, host string) (*ChainResult, erro
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 	defer conn.Close()
 
@@ -292,7 +292,7 @@ func CheckHeartbleed(ctx context.Context, host string, port int) (*HeartbleedRes
 		MinVersion:         tls.VersionTLS10,
 	})
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 	defer conn.Close()
 
@@ -306,7 +306,7 @@ func CheckHeartbleed(ctx context.Context, host string, port int) (*HeartbleedRes
 
 	_, err = conn.Write(heartbeat)
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 
 	resp := make([]byte, 16384)
@@ -338,8 +338,9 @@ func CheckPOODLE(ctx context.Context, host string, port int) (*PoodleResult, err
 		MaxVersion:         tls.VersionSSL30,
 	}
 
-	_, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", addr, config)
+	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", addr, config)
 	if err == nil {
+		conn.Close()
 		result.Vulnerable = true
 		result.SSL30 = true
 	}
@@ -370,8 +371,9 @@ func CheckDROWN(ctx context.Context, host string, port int) (*DrownResult, error
 		MaxVersion:         tls.VersionSSL30,
 	}
 
-	_, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", addr, config)
+	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", addr, config)
 	if err == nil {
+		conn.Close()
 		result.Vulnerable = true
 		result.Detail = "Server supports SSLv2/SSLv3 (DROWN)"
 	}
@@ -389,7 +391,7 @@ func CheckROBOT(ctx context.Context, host string, port int) (*RobotResult, error
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 	defer conn.Close()
 
@@ -414,7 +416,7 @@ func CheckLucky13(ctx context.Context, host string, port int) (*Lucky13Result, e
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 	defer conn.Close()
 
@@ -462,7 +464,7 @@ func CheckLogjam(ctx context.Context, host string, port int) (*LogjamResult, err
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 	defer conn.Close()
 
@@ -512,7 +514,7 @@ func CheckCRIME(ctx context.Context, host string, port int) (*CrimeResult, error
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 	defer conn.Close()
 
@@ -532,7 +534,7 @@ func CheckBREACH(ctx context.Context, host string, port int) (*BreachResult, err
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 	defer conn.Close()
 

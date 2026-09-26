@@ -212,6 +212,9 @@ func DisassembleContract(ctx context.Context, bytecode string) (*DisassemblyResu
 		if !ok {
 			if op >= 0x60 && op <= 0x7f {
 				pushSize := int(op - 0x5f)
+				if i+1+pushSize > len(bcode) {
+					break
+				}
 				result.Opcodes = append(result.Opcodes, fmt.Sprintf("PUSH%d 0x%s", pushSize, hex.EncodeToString(bcode[i+1:i+1+pushSize])))
 				i += 1 + pushSize
 				continue

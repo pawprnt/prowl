@@ -11,17 +11,18 @@ import (
 	"syscall"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/pawprnt/prowl/internal/config"
 	"github.com/pawprnt/prowl/internal/scanner"
 	"golang.org/x/term"
 )
 
-const banner = `▀▀▀▀█▄▀▀▀▀█▄ ▄█▀█▄ █▄   ▄█ ██
- ██▄█▀ ██▄█▀ ██ ██ ██   ██ ██
- ██    ██ ██ ██ ██ ██ █ ██ ██ ▄█
- █▀    █▀ ▀█ ▀█▄█▀ ▀█▄▀▄█▀ ▀█▄██
-                   security research cli
+const banner = `   ___                    
+  / _ \ _ __   ___ _ __   
+ / /_)/| '__| / _ \ '_ \  
+/ ___/ | |   |  __/ | | | 
+\/    |_|    \___|_| |_| 
 `
 
 const (
@@ -91,6 +92,9 @@ func New() *REPL {
 	bmPath := filepath.Join(home, bookmarksFile)
 
 	cfg, _ := config.Load()
+	if cfg == nil {
+		cfg = &config.Config{}
+	}
 	scanner.SetConfig(cfg)
 
 	r := &REPL{
@@ -150,32 +154,18 @@ func (r *REPL) handleTarget(args []string) error {
 
 func (r *REPL) handleTabCompletion(buf []byte) ([]byte, []byte) {
 	line := string(buf)
-	completed, _ := r.completer.Complete([]rune(line), len(line))
+	completed, _ := r.completer.Complete([]rune(line), utf8.RuneCountInString(line))
 	return []byte(string(completed)), nil
 }
 
 func (r *REPL) prompt() string {
-	statusParts := []string{"prowl"}
-
 	if r.target != "" {
-		statusParts = append(statusParts, "\033[32m"+r.target+"\033[0m")
-	} else {
-		statusParts = append(statusParts, "\033[33mno-target\033[0m")
+		return "\033[1;36mprowl:\033[32m" + r.target + "\033[0m \033[1;37m▸ \033[0m"
 	}
-
-	if r.profile != "" && r.profile != "default" {
-		statusParts = append(statusParts, "\033[36m"+r.profile+"\033[0m")
-	}
-
-	if r.scanStatus != "" {
-		statusParts = append(statusParts, "\033[35m"+r.scanStatus+"\033[0m")
-	}
-
-	return strings.Join(statusParts, ":") + "> "
+	return "\033[1;36mprowl\033[0m \033[1;37m▸ \033[0m"
 }
 
 func (r *REPL) Run() error {
-	fmt.Print("\033[2J\033[H\n")
 	fmt.Fprint(os.Stdout, banner)
 	r.showWelcomeBanner()
 
@@ -217,12 +207,23 @@ func (r *REPL) showWelcomeBanner() {
 	toolCount := r.countAvailableTools()
 	targetDisplay := r.target
 	if targetDisplay == "" {
-		targetDisplay = "none"
+		targetDisplay = "\033[90mnot set\033[0m"
 	}
 
-	fmt.Fprintf(os.Stdout, "\033[90m  tools: %d available\033[0m\n", toolCount)
-	fmt.Fprintf(os.Stdout, "\033[90m  target: %s | profile: %s\033[0m\n", targetDisplay, r.profile)
-	fmt.Fprintf(os.Stdout, "\033[90m  findings: %d | type '?' for help\033[0m\n\n", len(r.session.Findings))
+	findingsCount := len(r.session.Findings)
+	findingsStr := fmt.Sprintf("%d", findingsCount)
+	if findingsCount == 0 {
+		findingsStr = "0"
+	}
+
+	fmt.Fprintln(os.Stdout)
+	fmt.Fprintf(os.Stdout, " \033[1;36m┌─\033[0m prowl \033[1;37mv1.0.0\033[0m \033[1;36m%s\033[0m\n", strings.Repeat("─", 30))
+	fmt.Fprintf(os.Stdout, " \033[1;36m│\033[0m  tools: \033[1;32m%d available\033[0m\n", toolCount)
+	fmt.Fprintf(os.Stdout, " \033[1;36m│\033[0m  target: %s  profile: \033[1;35m%s\033[0m\n", targetDisplay, r.profile)
+	fmt.Fprintf(os.Stdout, " \033[1;36m│\033[0m  findings: \033[1;33m%s\033[0m  session: \033[1;32mactive\033[0m\n", findingsStr)
+	fmt.Fprintf(os.Stdout, " \033[1;36m│\033[0m  type \033[1;37m'help'\033[0m for commands\n")
+	fmt.Fprintf(os.Stdout, " \033[1;36m└%s\033[0m\n", strings.Repeat("─", 42))
+	fmt.Fprintln(os.Stdout)
 }
 
 func (r *REPL) readLine() (string, error) {
@@ -327,7 +328,9 @@ func (r *REPL) readLine() (string, error) {
 
 		case ch == 27:
 			var seq [2]byte
-			os.Stdin.Read(seq[:])
+			if _, err := os.Stdin.Read(seq[:]); err != nil {
+				continue
+			}
 			if seq[0] == '[' {
 				switch seq[1] {
 				case 'A':
@@ -379,7 +382,11 @@ func (r *REPL) executeLine(line string) {
 	}
 	r.lastCommand = line
 
-	args := parseLine(line)
+	args, err := parseLine(line)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
+		return
+	}
 	if len(args) == 0 {
 		return
 	}
@@ -489,6 +496,7 @@ func (r *REPL) executeLine(line string) {
 			r.runWithSpinner(func() error {
 				return sub.Handler(cmdArgs[1:])
 			})
+			r.dangerConfirm = false
 			return
 		}
 	}
@@ -496,9 +504,10 @@ func (r *REPL) executeLine(line string) {
 	r.runWithSpinner(func() error {
 		return cmd.Handler(cmdArgs)
 	})
+	r.dangerConfirm = false
 }
 
-func parseLine(line string) []string {
+func parseLine(line string) ([]string, error) {
 	var args []string
 	var current strings.Builder
 	inQuote := false
@@ -549,7 +558,11 @@ func parseLine(line string) []string {
 		args = append(args, current.String())
 	}
 
-	return args
+	if inQuote {
+		return nil, fmt.Errorf("unclosed quote in input")
+	}
+
+	return args, nil
 }
 
 func (r *REPL) showExamples(args []string) error {
@@ -744,6 +757,7 @@ func (r *REPL) registerCommands() {
 			"programs": {Name: "programs", Help: "list all programs", Handler: r.bountyPrograms},
 			"scope":    {Name: "scope", Help: "show scope", Handler: r.bountyScope},
 			"stats":    {Name: "stats", Help: "show program statistics", Handler: r.bountyStats},
+			"hunt":     {Name: "hunt", Help: "run automated scan on program", Handler: r.bountyHunt},
 		},
 	}
 

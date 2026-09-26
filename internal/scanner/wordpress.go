@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -443,24 +444,20 @@ func CheckWPUsers(ctx context.Context, target string) (*WPUsersResult, error) {
 		bodyStr := string(body)
 
 		slugRe := regexp.MustCompile(`/author/([a-zA-Z0-9_-]+)/`)
-		if matches := slugRe.FindStringSubmatch(bodyStr); len(matches) > 1 {
-			if !seen[i] {
-				seen[i] = true
-				result.Users = append(result.Users, WPUser{
-					ID:   i,
-					Slug: matches[1],
-				})
-			}
-		}
-
 		nameRe := regexp.MustCompile(`(?i)<title>([^<]*)\s*[|–-]\s*([^<]*)</title>`)
-		if matches := nameRe.FindStringSubmatch(bodyStr); len(matches) > 2 {
-			if !seen[i] {
+		if !seen[i] {
+			slugMatch := slugRe.FindStringSubmatch(bodyStr)
+			nameMatch := nameRe.FindStringSubmatch(bodyStr)
+			if len(slugMatch) > 1 || len(nameMatch) > 2 {
 				seen[i] = true
-				result.Users = append(result.Users, WPUser{
-					ID:       i,
-					Username: strings.TrimSpace(matches[1]),
-				})
+				user := WPUser{ID: i}
+				if len(slugMatch) > 1 {
+					user.Slug = slugMatch[1]
+				}
+				if len(nameMatch) > 2 {
+					user.Username = strings.TrimSpace(nameMatch[1])
+				}
+				result.Users = append(result.Users, user)
 			}
 		}
 	}
@@ -678,7 +675,20 @@ func WPScan(ctx context.Context, target string) (*WPScanResult, error) {
 	if path, ok := findTool("wpscan"); ok {
 		output, err := runCommand(ctx, path, "--url", target, "--format", "json", "--no-banner", "--random-user-agent")
 		if err == nil {
-			_ = output
+			var result WPScanResult
+			if jsonErr := json.Unmarshal(output, &result); jsonErr == nil {
+				if result.Target == "" {
+					result.Target = target
+				}
+				if result.Timestamp.IsZero() {
+					result.Timestamp = time.Now()
+				}
+				return &result, nil
+			}
+			return &WPScanResult{
+				Target:    target,
+				Timestamp: time.Now(),
+			}, nil
 		}
 	}
 
