@@ -3,6 +3,14 @@
 , fetchFromGitHub
 }:
 
+let
+  bountyData = fetchFromGitHub {
+    owner = "arkadiyt";
+    repo = "bounty-targets-data";
+    rev = "b5a63896f664fb4a6086a0d098e9b7d14abfc340";
+    hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+  };
+in
 buildGoModule {
   pname = "prowl";
   version = "1.0.0";
@@ -14,6 +22,11 @@ buildGoModule {
     rev = "master";
     hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
   };
+
+  postPatch = ''
+    rm -rf data/bounty-data
+    cp -r ${bountyData} data/bounty-data
+  '';
 
   ldflags = [
     "-s" "-w"

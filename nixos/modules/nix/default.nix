@@ -27,7 +27,6 @@
     };
     extraOptions = ''
       sandbox-fallback = false
-      log-serialise = true
     '';
   };
 }
