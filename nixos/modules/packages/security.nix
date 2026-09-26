@@ -31,7 +31,7 @@
     gobuster
 
     # Password Cracking
-    hydra
+    thc-hydra
     john
     hashcat
     cewl
@@ -84,7 +84,6 @@
     # Reverse Engineering
     gdb
     ghidra
-    retdec
     jadx
     apktool
 
