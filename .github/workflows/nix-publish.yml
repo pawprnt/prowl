@@ -12,10 +12,10 @@ on:
 
 jobs:
   nix-publish:
-    uses: pawprnt/.github/.github/workflows/nix-publish.yml@main
+    uses: pawprnt/.github/.github/workflows/nix/deploy.yml@main
     with:
       pkgname: prowl
       nixpkgs-repo: pawprnt/nixpkgs
-      nix-path: pkgs/prowl/default.nix
+      nix-path: nix/default.nix
     secrets:
       NIX_GITHUB_TOKEN: ${{ secrets.NIX_GITHUB_TOKEN }}
